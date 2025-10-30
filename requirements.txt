@@ -1,2 +1,6 @@
 selenium
 chrome-driver
+flask
+yt-dlp
+requests
+python-dotenv

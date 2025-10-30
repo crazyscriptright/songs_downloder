@@ -25,6 +25,10 @@ import re
 from datetime import datetime
 import requests
 from io import BytesIO
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Import our custom modules
 try:
@@ -51,9 +55,12 @@ jiosaavn_api = None
 # Store search results
 search_results = {}
 download_status = {}
+active_processes = {}  # Store active download processes for cancellation
 
 # Unified cache file for all APIs
 UNIFIED_CACHE_FILE = "music_api_cache.json"
+DOWNLOAD_QUEUE_FILE = "download_queue.json"
+DOWNLOAD_STATUS_FILE = "download_status.json"
 
 
 def get_apis():
@@ -76,6 +83,61 @@ def get_apis():
         jiosaavn_api = JioSaavnAPI()
     
     return ytmusic_api, ytvideo_api, jiosaavn_api
+
+
+def load_persistent_data():
+    """Load download queue and status from files - DISABLED for fresh start"""
+    global download_status
+    
+    # NO PERSISTENCE - Always start fresh
+    download_status = {}
+    print("🆕 Starting with clean download status (no persistence)")
+    
+    # Comment out file loading to prevent any restoration
+    # try:
+    #     if os.path.exists(DOWNLOAD_STATUS_FILE):
+    #         with open(DOWNLOAD_STATUS_FILE, 'r') as f:
+    #             download_status = json.load(f)
+    #         print(f"📥 Loaded {len(download_status)} download status records")
+    # except Exception as e:
+    #     print(f"Warning: Could not load download status: {e}")
+    #     download_status = {}
+
+
+def save_download_status():
+    """Save download status to file - DISABLED for no persistence"""
+    # NO PERSISTENCE - Don't save anything
+    pass
+    # Comment out file saving to prevent any persistence
+    # try:
+    #     with open(DOWNLOAD_STATUS_FILE, 'w') as f:
+    #         json.dump(download_status, f, indent=2)
+    # except Exception as e:
+    #     print(f"Warning: Could not save download status: {e}")
+
+
+def cleanup_old_downloads():
+    """Clean up old completed/failed downloads older than 24 hours"""
+    try:
+        current_time = datetime.now()
+        to_remove = []
+        
+        for download_id, status in download_status.items():
+            if 'timestamp' in status:
+                download_time = datetime.fromisoformat(status['timestamp'])
+                if (current_time - download_time).total_seconds() > 86400:  # 24 hours
+                    if status.get('status') in ['complete', 'error', 'cancelled']:
+                        to_remove.append(download_id)
+        
+        for download_id in to_remove:
+            del download_status[download_id]
+        
+        if to_remove:
+            print(f"🧹 Cleaned up {len(to_remove)} old download records")
+            save_download_status()
+    
+    except Exception as e:
+        print(f"Warning: Could not cleanup old downloads: {e}")
 
 
 def search_ytmusic(query):
@@ -214,18 +276,20 @@ def search_soundcloud(query):
 
 
 def is_url(query):
-    """Check if query is a URL"""
-    url_patterns = [
-        r'https?://',
-        r'www\.',
-        r'youtube\.com',
-        r'youtu\.be',
+    """Check if query is a MUSIC-related URL (not just any URL)"""
+    # Only detect URLs from supported music platforms
+    music_url_patterns = [
+        r'youtube\.com/watch',
+        r'youtu\.be/',
         r'music\.youtube\.com',
-        r'jiosaavn\.com',
-        r'saavn\.com',
-        r'soundcloud\.com'
+        r'jiosaavn\.com/',
+        r'saavn\.com/',
+        r'soundcloud\.com/',
+        r'spotify\.com/',
+        r'gaana\.com/',
+        r'wynk\.in/',
     ]
-    return any(re.search(pattern, query, re.IGNORECASE) for pattern in url_patterns)
+    return any(re.search(pattern, query, re.IGNORECASE) for pattern in music_url_patterns)
 
 
 def validate_url_simple(url):
@@ -369,15 +433,19 @@ def search_all_sources(query, search_id, search_type='music'):
 
 def download_song(url, title, download_id, advanced_options=None):
     """Download song/video using yt-dlp with optional advanced parameters and progress tracking"""
-    global download_status
+    global download_status, active_processes
     
     download_status[download_id] = {
         'status': 'downloading',
         'progress': 0,
         'title': title,
+        'url': url,
         'eta': 'Calculating...',
-        'speed': '0 KB/s'
+        'speed': '0 KB/s',
+        'timestamp': datetime.now().isoformat(),
+        'advanced_options': advanced_options
     }
+    save_download_status()
     
     try:
         import subprocess
@@ -464,6 +532,9 @@ def download_song(url, title, download_id, advanced_options=None):
             creationflags=creation_flags
         )
         
+        # Store process for potential cancellation
+        active_processes[download_id] = process
+        
         # Set process to low priority on Linux/Mac
         if os.name != 'nt':
             try:
@@ -474,6 +545,12 @@ def download_song(url, title, download_id, advanced_options=None):
         
         # Parse progress in real-time
         for line in process.stdout:
+            # Check if download was cancelled
+            if download_status.get(download_id, {}).get('status') == 'cancelled':
+                print(f"🚫 Download {download_id} was cancelled")
+                process.terminate()
+                break
+                
             line = line.strip()
             print(line)  # Debug output
             
@@ -497,14 +574,26 @@ def download_song(url, title, download_id, advanced_options=None):
                             'status': 'downloading',
                             'progress': min(progress, 99),  # Cap at 99% until complete
                             'title': title,
+                            'url': url,
                             'speed': speed,
-                            'eta': eta
+                            'eta': eta,
+                            'timestamp': download_status[download_id]['timestamp'],
+                            'advanced_options': advanced_options
                         }
+                        save_download_status()
                 except Exception as parse_err:
                     print(f"Parse error: {parse_err}")
                     pass
         
+        # Clean up process reference
+        if download_id in active_processes:
+            del active_processes[download_id]
+        
         process.wait()
+        
+        # Check if cancelled during execution
+        if download_status.get(download_id, {}).get('status') == 'cancelled':
+            return
         
         if process.returncode == 0:
             # Find the downloaded file
@@ -524,27 +613,39 @@ def download_song(url, title, download_id, advanced_options=None):
                     'status': 'complete',
                     'progress': 100,
                     'title': title,
+                    'url': url,
                     'file': filename,
                     'speed': 'Complete',
-                    'eta': '0:00'
+                    'eta': '0:00',
+                    'timestamp': download_status[download_id]['timestamp'],
+                    'completed_at': datetime.now().isoformat(),
+                    'advanced_options': advanced_options
                 }
             else:
                 download_status[download_id] = {
                     'status': 'complete',
                     'progress': 100,
                     'title': title,
+                    'url': url,
                     'file': f"{safe_title}.mp3",
                     'speed': 'Complete',
-                    'eta': '0:00'
+                    'eta': '0:00',
+                    'timestamp': download_status[download_id]['timestamp'],
+                    'completed_at': datetime.now().isoformat(),
+                    'advanced_options': advanced_options
                 }
         else:
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
                 'title': title,
+                'url': url,
                 'error': 'Download failed',
                 'speed': '0 KB/s',
-                'eta': 'N/A'
+                'eta': 'N/A',
+                'timestamp': download_status[download_id]['timestamp'],
+                'failed_at': datetime.now().isoformat(),
+                'advanced_options': advanced_options
             }
     
     except Exception as e:
@@ -552,10 +653,21 @@ def download_song(url, title, download_id, advanced_options=None):
             'status': 'error',
             'progress': 0,
             'title': title,
+            'url': url,
             'error': str(e),
             'speed': '0 KB/s',
-            'eta': 'N/A'
+            'eta': 'N/A',
+            'timestamp': download_status[download_id]['timestamp'],
+            'failed_at': datetime.now().isoformat(),
+            'advanced_options': advanced_options
         }
+    
+    finally:
+        # Always save final status
+        save_download_status()
+        # Clean up process reference
+        if download_id in active_processes:
+            del active_processes[download_id]
 
 
 @app.route('/')
@@ -564,7 +676,14 @@ def index():
     # Get query parameter from URL
     query = request.args.get('q', '').strip()
     search_type = request.args.get('type', 'music')
-    return render_template('index.html', initial_query=query, initial_type=search_type)
+    
+    # Get frontend URL from environment variable
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5000')
+    
+    return render_template('index.html', 
+                         initial_query=query, 
+                         initial_type=search_type,
+                         frontend_url=frontend_url)
 
 
 @app.route('/search', methods=['POST'])
@@ -646,6 +765,97 @@ def download_status_check(download_id):
         return jsonify({'status': 'not_found'}), 404
 
 
+@app.route('/downloads')
+def get_all_downloads():
+    """Get all download statuses for persistent tracking"""
+    # Filter out very old completed downloads
+    filtered_downloads = {}
+    current_time = datetime.now()
+    
+    for download_id, status in download_status.items():
+        # Keep all active downloads and recent completed ones
+        if status.get('status') in ['downloading', 'queued', 'preparing']:
+            filtered_downloads[download_id] = status
+        elif status.get('status') in ['complete', 'error', 'cancelled']:
+            # Keep completed downloads for 24 hours
+            if 'timestamp' in status:
+                try:
+                    download_time = datetime.fromisoformat(status['timestamp'])
+                    if (current_time - download_time).total_seconds() < 86400:  # 24 hours
+                        filtered_downloads[download_id] = status
+                except:
+                    # Keep if timestamp parsing fails
+                    filtered_downloads[download_id] = status
+            else:
+                # Keep if no timestamp
+                filtered_downloads[download_id] = status
+    
+    # Add download URLs for completed files
+    for download_id, status in filtered_downloads.items():
+        if status['status'] == 'complete' and 'file' in status:
+            status['download_url'] = f"/get_file/{status['file']}"
+    
+    return jsonify(filtered_downloads)
+
+
+@app.route('/cancel_download/<download_id>', methods=['POST'])
+def cancel_download(download_id):
+    """Cancel a download"""
+    global download_status, active_processes
+    
+    if download_id not in download_status:
+        return jsonify({'error': 'Download not found'}), 404
+    
+    current_status = download_status[download_id]['status']
+    
+    if current_status in ['complete', 'error', 'cancelled']:
+        return jsonify({'error': 'Download already finished'}), 400
+    
+    # Mark as cancelled
+    download_status[download_id]['status'] = 'cancelled'
+    download_status[download_id]['cancelled_at'] = datetime.now().isoformat()
+    download_status[download_id]['progress'] = 0
+    download_status[download_id]['speed'] = 'Cancelled'
+    download_status[download_id]['eta'] = 'N/A'
+    
+    # Terminate active process if it exists
+    if download_id in active_processes:
+        try:
+            process = active_processes[download_id]
+            process.terminate()
+            print(f"🚫 Terminated download process for {download_id}")
+        except Exception as e:
+            print(f"Warning: Could not terminate process for {download_id}: {e}")
+    
+    save_download_status()
+    
+    return jsonify({
+        'status': 'cancelled',
+        'message': f"Download cancelled: {download_status[download_id]['title']}"
+    })
+
+
+@app.route('/clear_downloads', methods=['POST'])
+def clear_downloads():
+    """Clear completed/failed downloads"""
+    global download_status
+    
+    to_remove = []
+    for download_id, status in download_status.items():
+        if status.get('status') in ['complete', 'error', 'cancelled']:
+            to_remove.append(download_id)
+    
+    for download_id in to_remove:
+        del download_status[download_id]
+    
+    save_download_status()
+    
+    return jsonify({
+        'message': f'Cleared {len(to_remove)} finished downloads',
+        'cleared_count': len(to_remove)
+    })
+
+
 @app.route('/get_file/<filename>')
 def get_file(filename):
     """Serve downloaded file to browser"""
@@ -686,13 +896,21 @@ if __name__ == '__main__':
     print("="*70)
     print(f"📁 Download folder: {app.config['DOWNLOAD_FOLDER']}")
     print(f"💾 Unified cache file: {UNIFIED_CACHE_FILE}")
-    print(f"🕐 Cache duration: 2 hours")
+    print(f"� Download status file: {DOWNLOAD_STATUS_FILE}")
+    print(f"�🕐 Cache duration: 2 hours")
     print(f"🌐 Browser mode: Headless (background)")
     print("="*70)
+    
+    # Load persistent data
+    load_persistent_data()
+    cleanup_old_downloads()
+    
     print("\n✅ Server running at: http://localhost:5000")
     print("\n🎯 Features:")
     print("   • Unified cache for all APIs (faster searches)")
     print("   • Headless browser (no popup windows)")
+    print("   • Persistent download tracking (survives refresh)")
+    print("   • Download cancellation support")
     print("   • Direct URL validation and download")
     print("   • Auto-retry on errors")
     print("\n   Press Ctrl+C to stop\n")
