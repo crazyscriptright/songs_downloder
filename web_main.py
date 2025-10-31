@@ -146,7 +146,7 @@ def search_ytmusic(query):
     try:
         ytmusic, _, _ = get_apis()
         
-        # Will use cached tokens automatically (2 hour cache)
+        # use_fresh_tokens=True means "use cache if available" (inverted naming in API)
         data = ytmusic.search(query, use_fresh_tokens=True, retry_on_error=True)
         
         songs = ytmusic.parse_search_results(data) if data else []
@@ -173,7 +173,7 @@ def search_ytvideo(query):
     try:
         _, ytvideo, _ = get_apis()
         
-        # Will use cached tokens automatically (2 hour cache)
+        # use_fresh_tokens=True means "use cache if available" (inverted naming in API)
         data = ytvideo.search_videos(query, use_fresh_tokens=True, retry_on_error=True)
         
         videos = ytvideo.parse_video_results(data) if data else []
@@ -316,11 +316,21 @@ def validate_url_simple(url):
             else:
                 source = "YouTube"
             
+            # Check if URL contains a playlist
+            is_playlist = bool(re.search(r'[?&]list=([^&]+)', url))
+            playlist_id = None
+            if is_playlist:
+                playlist_match = re.search(r'[?&]list=([^&]+)', url)
+                if playlist_match:
+                    playlist_id = playlist_match.group(1)
+            
             return {
                 'is_valid': True,
                 'url': url,
                 'source': source,
-                'type': 'direct_url'
+                'type': 'direct_url',
+                'is_playlist': is_playlist,
+                'playlist_id': playlist_id
             }
     
     return {
@@ -450,12 +460,35 @@ def download_song(url, title, download_id, advanced_options=None):
     try:
         import subprocess
         import re as regex
+        import shlex
+        
+        # SECURITY: Validate and sanitize URL to prevent command injection
+        if not url or not isinstance(url, str):
+            raise ValueError("Invalid URL")
+        
+        # Only allow URLs (no local files or shell commands)
+        if not url.startswith(('http://', 'https://')):
+            raise ValueError("Only HTTP/HTTPS URLs are allowed")
+        
+        # SECURITY: Block shell operators and dangerous characters
+        DANGEROUS_CHARS = ['&&', '||', ';', '|', '`', '$', '(', ')', '<', '>', '\n', '\r', '&']
+        for dangerous_char in DANGEROUS_CHARS:
+            if dangerous_char in url:
+                raise ValueError(f"Security: Dangerous character '{dangerous_char}' detected in URL")
+            if dangerous_char in title:
+                raise ValueError(f"Security: Dangerous character '{dangerous_char}' detected in title")
         
         # Sanitize filename
         safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)
         
-        # Base command
+        # Base command - using list format for subprocess (safer than shell=True)
         cmd = ['yt-dlp']
+        
+        # SECURITY: Whitelist of allowed audio formats
+        ALLOWED_AUDIO_FORMATS = ['mp3', 'm4a', 'opus', 'vorbis', 'wav', 'flac']
+        
+        # SECURITY: Whitelist of allowed quality values
+        ALLOWED_QUALITIES = ['0', '2', '5', '9']
         
         # Apply advanced options if provided
         if advanced_options:
@@ -467,15 +500,51 @@ def download_song(url, title, download_id, advanced_options=None):
             keep_video = advanced_options.get('keepVideo', False)
             custom_args = advanced_options.get('customArgs', '')
             
+            # Video quality options (new)
+            video_quality = advanced_options.get('videoQuality', '1080')
+            video_fps = advanced_options.get('videoFPS', '30')
+            video_format = advanced_options.get('videoFormat', 'mkv')
+            
+            # SECURITY: Validate audio format against whitelist
+            if audio_format not in ALLOWED_AUDIO_FORMATS:
+                audio_format = 'mp3'  # Default to safe value
+            
+            # SECURITY: Validate quality against whitelist
+            if audio_quality not in ALLOWED_QUALITIES:
+                audio_quality = '0'  # Default to safe value
+            
+            # SECURITY: Validate video format
+            ALLOWED_VIDEO_FORMATS = ['mkv', 'mp4', 'webm']
+            if video_format not in ALLOWED_VIDEO_FORMATS:
+                video_format = 'mkv'
+            
             if keep_video:
-                # Video download defaults: 1080p 30fps MKV with embedded subtitles
+                # Video download with customizable quality
+                # Build format string based on user selection
+                if video_quality == 'best':
+                    format_selector = 'bestvideo+bestaudio/best'
+                else:
+                    # Specific resolution
+                    if video_fps == '60':
+                        format_selector = f'bestvideo[height<={video_quality}][fps<=60]+bestaudio/best[height<={video_quality}]'
+                    elif video_fps == '30':
+                        format_selector = f'bestvideo[height<={video_quality}][fps<=30]+bestaudio/best[height<={video_quality}]'
+                    else:  # any fps
+                        format_selector = f'bestvideo[height<={video_quality}]+bestaudio/best[height<={video_quality}]'
+                
                 cmd.extend([
-                    '-f', 'bestvideo[height<=1080][fps<=30]+bestaudio/best[height<=1080]',
-                    '--merge-output-format', 'mkv',
-                    '--embed-subs',
-                    '--write-auto-subs',
-                    '--sub-langs', 'en.*,hi.*,all',
+                    '-f', format_selector,
+                    '--merge-output-format', video_format,
                 ])
+                
+                # Add subtitle options if enabled
+                if embed_subtitles:
+                    cmd.extend([
+                        '--embed-subs',
+                        '--write-auto-subs',
+                        '--sub-langs', 'en.*,hi.*,all',
+                    ])
+                
                 output_template = os.path.join(app.config['DOWNLOAD_FOLDER'], f"%(title)s.%(ext)s")
             else:
                 # Audio download
@@ -490,12 +559,105 @@ def download_song(url, title, download_id, advanced_options=None):
             if add_metadata:
                 cmd.append('--embed-metadata')
             
-            if embed_thumbnail:
+            if embed_thumbnail and not keep_video:
                 cmd.append('--embed-thumbnail')
             
-            # Custom arguments
+            # SECURITY: Custom arguments - STRICT WHITELIST ONLY
             if custom_args:
-                cmd.extend(custom_args.split())
+                # SECURITY: Block shell operators in custom args
+                for dangerous_char in DANGEROUS_CHARS:
+                    if dangerous_char in custom_args:
+                        print(f"⚠️ SECURITY: Blocked custom args with dangerous character '{dangerous_char}'")
+                        custom_args = ''  # Clear the dangerous input
+                        break
+                
+                if custom_args:  # Only proceed if not cleared
+                    # Whitelist of safe yt-dlp arguments for advanced audio downloads
+                    SAFE_ARGS = [
+                        # Network & Geo
+                        '--geo-bypass',
+                        '--geo-bypass-country',
+                        '--prefer-free-formats',
+                        
+                        # Playlist handling
+                        '--no-playlist',
+                        '--yes-playlist',
+                        '--playlist-items',
+                        '--playlist-start',
+                        '--playlist-end',
+                        '--max-downloads',
+                        
+                        # Quality & Format
+                        '--format-sort',
+                        '--prefer-free-formats',
+                        
+                        # Download limits
+                        '--max-filesize',
+                        '--min-filesize',
+                        '--limit-rate',
+                        '--throttled-rate',
+                        
+                        # Retry & Error handling
+                        '--retries',
+                        '--fragment-retries',
+                        '--skip-unavailable-fragments',
+                        '--abort-on-unavailable-fragment',
+                        '--keep-fragments',
+                        
+                        # Subtitles
+                        '--write-subs',
+                        '--write-auto-subs',
+                        '--sub-langs',
+                        '--sub-format',
+                        '--convert-subs',
+                        
+                        # Metadata & Post-processing
+                        '--add-chapters',
+                        '--split-chapters',
+                        '--no-embed-chapters',
+                        '--xattrs',
+                        '--concat-playlist',
+                        
+                        # File System
+                        '--no-overwrites',
+                        '--continue',
+                        '--no-continue',
+                        '--no-part',
+                        '--no-mtime',
+                        '--write-description',
+                        '--write-info-json',
+                        '--write-playlist-metafiles',
+                        
+                        # Workarounds
+                        '--encoding',
+                        '--legacy-server-connect',
+                        '--no-check-certificates',
+                        '--prefer-insecure',
+                        '--add-header',
+                        '--sleep-requests',
+                        '--sleep-interval',
+                        '--max-sleep-interval',
+                        '--sleep-subtitles',
+                    ]
+                    
+                    # Parse custom args safely
+                    try:
+                        parsed_args = shlex.split(custom_args)
+                        for arg in parsed_args:
+                            # Additional security: check each arg for dangerous chars
+                            has_danger = any(dc in arg for dc in DANGEROUS_CHARS)
+                            if has_danger:
+                                print(f"⚠️ SECURITY: Blocked argument with dangerous character: {arg}")
+                                continue
+                            
+                            # Only allow whitelisted arguments
+                            arg_name = arg.split('=')[0] if '=' in arg else arg
+                            if arg_name in SAFE_ARGS:
+                                cmd.append(arg)
+                            else:
+                                print(f"⚠️ SECURITY: Blocked unsafe argument: {arg}")
+                    except Exception as e:
+                        print(f"⚠️ SECURITY: Failed to parse custom args (ignored): {e}")
         else:
             # Default: Audio download with best quality and metadata
             cmd.extend([
@@ -517,7 +679,8 @@ def download_song(url, title, download_id, advanced_options=None):
         
         print(f"🎵 Download command: {' '.join(cmd)}")
         
-        # Run with real-time output parsing at LOW PRIORITY
+        # SECURITY: Run with real-time output parsing at LOW PRIORITY
+        # IMPORTANT: shell=False prevents command injection (default, but explicit)
         # Set process creation flags for low priority
         creation_flags = 0
         if os.name == 'nt':  # Windows
@@ -529,6 +692,7 @@ def download_song(url, title, download_id, advanced_options=None):
             stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1,
+            shell=False,  # SECURITY: Never use shell=True!
             creationflags=creation_flags
         )
         
@@ -543,6 +707,10 @@ def download_song(url, title, download_id, advanced_options=None):
             except Exception as e:
                 print(f"Warning: Could not set process priority: {e}")
         
+        # Track error messages from yt-dlp
+        error_messages = []
+        has_progress = False
+        
         # Parse progress in real-time
         for line in process.stdout:
             # Check if download was cancelled
@@ -554,8 +722,36 @@ def download_song(url, title, download_id, advanced_options=None):
             line = line.strip()
             print(line)  # Debug output
             
+            # Detect ERROR messages from yt-dlp
+            if 'ERROR:' in line:
+                error_msg = line.replace('ERROR:', '').strip()
+                error_messages.append(error_msg)
+                print(f"⚠️ yt-dlp ERROR detected: {error_msg}")
+            
+            # Detect common error patterns
+            error_patterns = [
+                'Video unavailable',
+                'Private video',
+                'This video is not available',
+                'Unable to download',
+                'HTTP Error',
+                'is not a valid URL',
+                'Unsupported URL',
+                'Video is not available',
+                'This video has been removed',
+                'no suitable formats',
+                'Requested format is not available',
+                'Sign in to confirm',
+                'members-only content',
+            ]
+            
+            if any(pattern.lower() in line.lower() for pattern in error_patterns):
+                error_messages.append(line)
+                print(f"⚠️ Error pattern detected: {line}")
+            
             # Parse download progress: [download]  45.2% of 3.50MiB at 1.23MiB/s ETA 00:02
             if '[download]' in line and '%' in line:
+                has_progress = True  # Mark that we've seen actual download progress
                 try:
                     # Extract percentage
                     percent_match = regex.search(r'(\d+\.?\d*)%', line)
@@ -595,7 +791,27 @@ def download_song(url, title, download_id, advanced_options=None):
         if download_status.get(download_id, {}).get('status') == 'cancelled':
             return
         
-        if process.returncode == 0:
+        # Check for errors even if return code is 0 (yt-dlp sometimes returns 0 on errors)
+        if error_messages:
+            # Combine error messages
+            error_text = ' | '.join(error_messages[:3])  # Limit to first 3 errors
+            print(f"❌ Download failed with errors: {error_text}")
+            download_status[download_id] = {
+                'status': 'error',
+                'progress': 0,
+                'title': title,
+                'url': url,
+                'error': error_text,
+                'speed': '0 KB/s',
+                'eta': 'N/A',
+                'timestamp': download_status[download_id]['timestamp'],
+                'failed_at': datetime.now().isoformat(),
+                'advanced_options': advanced_options
+            }
+            save_download_status()
+            return
+        
+        if process.returncode == 0 and has_progress:
             # Find the downloaded file
             download_folder = app.config['DOWNLOAD_FOLDER']
             files = os.listdir(download_folder)
@@ -634,13 +850,32 @@ def download_song(url, title, download_id, advanced_options=None):
                     'completed_at': datetime.now().isoformat(),
                     'advanced_options': advanced_options
                 }
-        else:
+        elif process.returncode == 0 and not has_progress:
+            # yt-dlp returned 0 but no download progress - likely an error
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
                 'title': title,
                 'url': url,
-                'error': 'Download failed',
+                'error': 'No download progress detected. URL may be invalid or unavailable.',
+                'speed': '0 KB/s',
+                'eta': 'N/A',
+                'timestamp': download_status[download_id]['timestamp'],
+                'failed_at': datetime.now().isoformat(),
+                'advanced_options': advanced_options
+            }
+        else:
+            # Process returned non-zero exit code
+            error_text = 'Download failed'
+            if error_messages:
+                error_text = ' | '.join(error_messages[:3])  # Use collected error messages
+            
+            download_status[download_id] = {
+                'status': 'error',
+                'progress': 0,
+                'title': title,
+                'url': url,
+                'error': error_text,
                 'speed': '0 KB/s',
                 'eta': 'N/A',
                 'timestamp': download_status[download_id]['timestamp'],
@@ -733,8 +968,41 @@ def download():
     title = data.get('title')
     advanced_options = data.get('advancedOptions')
     
+    # SECURITY: Validate required parameters
     if not url or not title:
         return jsonify({'error': 'Missing url or title'}), 400
+    
+    # SECURITY: Validate URL format
+    if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'Invalid URL format. Only HTTP/HTTPS URLs are allowed.'}), 400
+    
+    # SECURITY: Block shell operators and dangerous characters
+    DANGEROUS_CHARS = ['&&', '||', ';', '|', '`', '$', '(', ')', '<', '>', '\n', '\r', '&']
+    for dangerous_char in DANGEROUS_CHARS:
+        if dangerous_char in url:
+            return jsonify({'error': f'Security: Dangerous character detected in URL'}), 400
+        if dangerous_char in title:
+            return jsonify({'error': f'Security: Dangerous character detected in title'}), 400
+    
+    # SECURITY: Validate title (prevent path traversal)
+    if not isinstance(title, str) or '..' in title or '/' in title or '\\' in title:
+        return jsonify({'error': 'Invalid title'}), 400
+    
+    # SECURITY: Limit title length
+    if len(title) > 200:
+        title = title[:200]
+    
+    # SECURITY: Validate URL length
+    if len(url) > 2048:
+        return jsonify({'error': 'URL too long'}), 400
+    
+    # SECURITY: Validate advanced options if provided
+    if advanced_options and isinstance(advanced_options, dict):
+        custom_args = advanced_options.get('customArgs', '')
+        if custom_args:
+            for dangerous_char in DANGEROUS_CHARS:
+                if dangerous_char in custom_args:
+                    return jsonify({'error': f'Security: Dangerous character detected in custom arguments'}), 400
     
     # Generate download ID
     download_id = f"download_{datetime.now().timestamp()}"
@@ -870,6 +1138,100 @@ def get_file(filename):
         else:
             return jsonify({'error': 'File not found'}), 404
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/preview_url', methods=['POST'])
+def preview_url():
+    """Get video/song info from URL using existing search APIs (FAST)"""
+    data = request.get_json()
+    url = data.get('url')
+    
+    if not url:
+        return jsonify({'error': 'Missing URL'}), 400
+    
+    # SECURITY: Validate URL
+    if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'Invalid URL format'}), 400
+    
+    try:
+        # Extract video ID for YouTube URLs
+        video_id = extract_video_id_from_url(url)
+        
+        if video_id:
+            # YouTube URL - use existing YouTube APIs (FAST - uses cached tokens)
+            try:
+                ytmusic, ytvideo, _ = get_apis()
+                
+                # Try YouTube Music API first
+                try:
+                    # Construct YouTube URL
+                    yt_url = f"https://www.youtube.com/watch?v={video_id}"
+                    
+                    # Search by URL to get metadata (uses cached tokens)
+                    # IMPORTANT: use_fresh_tokens=True means USE CACHE (backwards naming!)
+                    search_data = ytvideo.search_videos(video_id, use_fresh_tokens=True, retry_on_error=False)
+                    
+                    if search_data:
+                        videos = ytvideo.parse_video_results(search_data)
+                        if videos and len(videos) > 0:
+                            video = videos[0]
+                            
+                            # Return formatted preview data
+                            preview_data = {
+                                'title': video.get('title', 'Unknown Title'),
+                                'uploader': video.get('metadata', 'Unknown Channel'),
+                                'channel': video.get('metadata', 'Unknown Channel'),
+                                'thumbnail': video.get('thumbnail', f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"),
+                                'video_id': video_id,
+                                'webpage_url': yt_url,
+                                'source': 'YouTube'
+                            }
+                            
+                            return jsonify(preview_data)
+                except Exception as e:
+                    print(f"YouTube API preview error: {e}")
+                
+                # Fallback: Return basic info with video ID
+                preview_data = {
+                    'title': 'YouTube Video',
+                    'uploader': 'Unknown Channel',
+                    'channel': 'Unknown Channel',
+                    'thumbnail': f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+                    'video_id': video_id,
+                    'webpage_url': url,
+                    'source': 'YouTube'
+                }
+                
+                return jsonify(preview_data)
+                
+            except Exception as e:
+                print(f"YouTube preview error: {e}")
+        
+        # For non-YouTube URLs or if YouTube preview failed, return basic info
+        # Determine source
+        source = "Unknown"
+        if 'soundcloud.com' in url.lower():
+            source = "SoundCloud"
+        elif 'jiosaavn.com' in url.lower() or 'saavn.com' in url.lower():
+            source = "JioSaavn"
+        elif 'spotify.com' in url.lower():
+            source = "Spotify"
+        
+        # Return minimal preview data
+        preview_data = {
+            'title': f'{source} Content',
+            'uploader': source,
+            'channel': source,
+            'thumbnail': '',
+            'webpage_url': url,
+            'source': source
+        }
+        
+        return jsonify(preview_data)
+        
+    except Exception as e:
+        print(f"❌ Preview error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
