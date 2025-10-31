@@ -1,20 +1,5 @@
 """
-Universal Music Downloader - Web Interface
-
-A Flask-based web application that searches multiple music sources simultaneously
-and displays results with thumbnails.
-
-Supports:
-- YouTube Music (Songs & Videos)
-- JioSaavn
-- SoundCloud
-- Parallel search across all sources
-- Image thumbnails
-- One-click download
-
-Run:
-    python web_main.py
-    Then open: http://localhost:5000
+Universal Music Downloader - Flask Web Interface
 """
 
 from flask import Flask, render_template, request, jsonify, send_file
@@ -27,7 +12,6 @@ import requests
 from io import BytesIO
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 # Import our custom modules
@@ -44,20 +28,16 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['DOWNLOAD_FOLDER'] = os.path.join(os.path.expanduser("~"), "Downloads", "Music")
 
-# Ensure download folder exists
 os.makedirs(app.config['DOWNLOAD_FOLDER'], exist_ok=True)
 
-# Initialize APIs (lazy loading with unified cache)
 ytmusic_api = None
 ytvideo_api = None
 jiosaavn_api = None
 
-# Store search results
 search_results = {}
 download_status = {}
-active_processes = {}  # Store active download processes for cancellation
+active_processes = {}
 
-# Unified cache file for all APIs
 UNIFIED_CACHE_FILE = "music_api_cache.json"
 DOWNLOAD_QUEUE_FILE = "download_queue.json"
 DOWNLOAD_STATUS_FILE = "download_status.json"
@@ -86,38 +66,19 @@ def get_apis():
 
 
 def load_persistent_data():
-    """Load download queue and status from files - DISABLED for fresh start"""
+    """Start fresh without persistence"""
     global download_status
-    
-    # NO PERSISTENCE - Always start fresh
     download_status = {}
-    print("🆕 Starting with clean download status (no persistence)")
-    
-    # Comment out file loading to prevent any restoration
-    # try:
-    #     if os.path.exists(DOWNLOAD_STATUS_FILE):
-    #         with open(DOWNLOAD_STATUS_FILE, 'r') as f:
-    #             download_status = json.load(f)
-    #         print(f"📥 Loaded {len(download_status)} download status records")
-    # except Exception as e:
-    #     print(f"Warning: Could not load download status: {e}")
-    #     download_status = {}
+    print("🆕 Starting with clean download status")
 
 
 def save_download_status():
-    """Save download status to file - DISABLED for no persistence"""
-    # NO PERSISTENCE - Don't save anything
+    """No persistence - skip saving"""
     pass
-    # Comment out file saving to prevent any persistence
-    # try:
-    #     with open(DOWNLOAD_STATUS_FILE, 'w') as f:
-    #         json.dump(download_status, f, indent=2)
-    # except Exception as e:
-    #     print(f"Warning: Could not save download status: {e}")
 
 
 def cleanup_old_downloads():
-    """Clean up old completed/failed downloads older than 24 hours"""
+    """Clean up old downloads"""
     try:
         current_time = datetime.now()
         to_remove = []
@@ -141,14 +102,11 @@ def cleanup_old_downloads():
 
 
 def search_ytmusic(query):
-    """Search YouTube Music for songs"""
+    """Search YouTube Music"""
     results = []
     try:
         ytmusic, _, _ = get_apis()
-        
-        # use_fresh_tokens=True means "use cache if available" (inverted naming in API)
         data = ytmusic.search(query, use_fresh_tokens=True, retry_on_error=True)
-        
         songs = ytmusic.parse_search_results(data) if data else []
         
         for song in songs:
@@ -1263,18 +1221,8 @@ if __name__ == '__main__':
     print(f"🌐 Browser mode: Headless (background)")
     print("="*70)
     
-    # Load persistent data
     load_persistent_data()
     cleanup_old_downloads()
     
-    print("\n✅ Server running at: http://localhost:5000")
-    print("\n🎯 Features:")
-    print("   • Unified cache for all APIs (faster searches)")
-    print("   • Headless browser (no popup windows)")
-    print("   • Persistent download tracking (survives refresh)")
-    print("   • Download cancellation support")
-    print("   • Direct URL validation and download")
-    print("   • Auto-retry on errors")
-    print("\n   Press Ctrl+C to stop\n")
-    
+    print("🌐 Server: http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)

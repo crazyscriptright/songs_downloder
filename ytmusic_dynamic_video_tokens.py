@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class YouTubeMusicVideoAPI:
-    def __init__(self, cache_file="music_api_cache.json", cache_duration_hours=2, headless=True):
+    def __init__(self, cache_file="music_api_cache.json", cache_duration_hours=24, headless=True):
         self.driver = None
         self.api_key = None
         self.context = None

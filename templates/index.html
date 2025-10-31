@@ -4,39 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Universal Music Downloader</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8f9fa;
+            /* Modern Light theme (default) */
+            --bg-primary: #fafafa;
+            --bg-secondary: #f5f5f5;
             --bg-card: #ffffff;
-            --text-primary: #2d3436;
-            --text-secondary: #636e72;
-            --text-tertiary: #95a5a6;
-            --accent-color: #00b894;
-            --accent-secondary: #00a085;
-            --border-color: #ddd;
-            --shadow-color: rgba(0, 184, 148, 0.15);
-            --success-color: #00b894;
-            --error-color: #e74c3c;
-            --warning-color: #f39c12;
-            --download-color: #6c5ce7;
+            --text-primary: #2d2d2d;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --accent-color: #10b981;
+            --accent-secondary: #059669;
+            --border-color: #e5e7eb;
+            --shadow-color: rgba(16, 185, 129, 0.15);
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #8b5cf6;
+            --download-color: #a855f7;
+            --gradient-primary: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+            --gradient-secondary: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --status-success-bg: rgba(16, 185, 129, 0.1);
+            --status-success-border: rgba(16, 185, 129, 0.3);
+            --status-error-bg: rgba(239, 68, 68, 0.1);
+            --status-error-border: rgba(239, 68, 68, 0.3);
+            --status-warning-bg: rgba(245, 158, 11, 0.1);
+            --status-warning-border: rgba(245, 158, 11, 0.3);
+            --status-info-bg: rgba(139, 92, 246, 0.1);
+            --status-info-border: rgba(139, 92, 246, 0.3);
+            --status-loading-bg: rgba(128, 128, 128, 0.03);
+            --status-loading-border: rgba(128, 128, 128, 0.15);
+        }
+
+        /* Modern Dark theme */
+        body:not(.light-theme) {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-card: #1f1f1f;
+            --text-primary: #f0f0f0;
+            --text-secondary: #d1d5db;
+            --text-tertiary: #9ca3af;
+            --accent-color: #34d399;
+            --accent-secondary: #10b981;
+            --border-color: #374151;
+            --shadow-color: rgba(52, 211, 153, 0.2);
+            --success-color: #34d399;
+            --error-color: #f87171;
+            --warning-color: #fbbf24;
+            --info-color: #a78bfa;
+            --download-color: #c084fc;
+            --gradient-primary: linear-gradient(135deg, #c084fc 0%, #7c3aed 100%);
+            --gradient-secondary: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+            --status-success-bg: rgba(52, 211, 153, 0.15);
+            --status-success-border: rgba(52, 211, 153, 0.4);
+            --status-error-bg: rgba(248, 113, 113, 0.15);
+            --status-error-border: rgba(248, 113, 113, 0.4);
+            --status-warning-bg: rgba(251, 191, 36, 0.15);
+            --status-warning-border: rgba(251, 191, 36, 0.4);
+            --status-info-bg: rgba(167, 139, 250, 0.15);
+            --status-info-border: rgba(167, 139, 250, 0.4);
+            --status-loading-bg: rgba(128, 128, 128, 0.05);
+            --status-loading-border: rgba(128, 128, 128, 0.2);
         }
 
         body.light-theme {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8f9fa;
+            --bg-primary: #fafafa;
+            --bg-secondary: #f5f5f5;
             --bg-card: #ffffff;
-            --text-primary: #2d3436;
-            --text-secondary: #636e72;
-            --text-tertiary: #95a5a6;
-            --accent-color: #00b894;
-            --accent-secondary: #00a085;
-            --border-color: #ddd;
-            --shadow-color: rgba(0, 184, 148, 0.15);
-            --success-color: #00b894;
-            --error-color: #e74c3c;
-            --warning-color: #f39c12;
-            --download-color: #6c5ce7;
+            --text-primary: #2d2d2d;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --accent-color: #10b981;
+            --accent-secondary: #059669;
+            --border-color: #e5e7eb;
+            --shadow-color: rgba(16, 185, 129, 0.15);
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #8b5cf6;
+            --download-color: #a855f7;
+            --gradient-primary: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+            --gradient-secondary: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --status-success-bg: rgba(16, 185, 129, 0.1);
+            --status-success-border: rgba(16, 185, 129, 0.3);
+            --status-error-bg: rgba(239, 68, 68, 0.1);
+            --status-error-border: rgba(239, 68, 68, 0.3);
+            --status-warning-bg: rgba(245, 158, 11, 0.1);
+            --status-warning-border: rgba(245, 158, 11, 0.3);
+            --status-info-bg: rgba(139, 92, 246, 0.1);
+            --status-info-border: rgba(139, 92, 246, 0.3);
+            --status-loading-bg: rgba(128, 128, 128, 0.03);
+            --status-loading-border: rgba(128, 128, 128, 0.15);
         }
 
         * {
@@ -46,19 +108,51 @@
         }
 
         body {
-            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
             padding: 20px;
             transition: all 0.3s ease;
             line-height: 1.6;
+            font-weight: 400;
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
             position: relative;
+        }
+
+        /* Enhanced visual hierarchy */
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px 20px;
+        }
+
+        .header h1 {
+            font-family: 'Inter', sans-serif;
+            font-size: 3.2em;
+            font-weight: 800;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1.1em;
+            font-weight: 400;
+            opacity: 0.8;
+        }
+
+        .search-box {
+            padding: 30px 20px;
+            margin-bottom: 50px;
         }
 
         /* Download Manager */
@@ -68,9 +162,9 @@
             right: 20px;
             width: 350px;
             background: var(--bg-card);
-            border: 2px solid var(--border-color);
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             z-index: 1000;
             max-height: 70vh;
             overflow-y: auto;
@@ -319,9 +413,10 @@
             text-align: center;
         }
 
-        .header h1 a:hover {
-            opacity: 0.8;
-            transform: scale(1.02);
+        .header h1 a {
+            display: inline-flex !important;
+            align-items: center;
+            width: auto;
             transition: all 0.3s ease;
         }
 
@@ -540,22 +635,140 @@
 
         .status {
             text-align: center;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 20px 25px;
+            border-radius: 15px;
+            margin: 20px auto;
+            max-width: 600px;
             display: none;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            border: 2px solid transparent;
+            font-weight: 500;
+            font-size: 1.1em;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(10px);
+            opacity: 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .status::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .status.show {
+            display: block;
+            transform: translateY(0);
+            opacity: 1;
         }
 
         .status.searching {
-            background: rgba(0, 136, 255, 0.2);
-            border: 2px solid rgba(0, 136, 255, 0.5);
+            background: var(--status-loading-bg);
+            border-color: var(--status-loading-border);
+            color: var(--download-color);
             display: block;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .status.searching::before {
+            left: 100%;
         }
 
         .status.complete {
-            background: rgba(0, 255, 136, 0.2);
-            border: 2px solid rgba(0, 255, 136, 0.5);
+            background: var(--status-success-bg);
+            border-color: var(--status-success-border);
+            color: var(--success-color);
             display: block;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .status.error {
+            background: var(--status-error-bg);
+            border-color: var(--status-error-border);
+            color: var(--error-color);
+            display: block;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .status.warning {
+            background: var(--status-warning-bg);
+            border-color: var(--status-warning-border);
+            color: var(--warning-color);
+            display: block;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .status.info {
+            background: var(--status-info-bg);
+            border-color: var(--status-info-border);
+            color: var(--info-color);
+            display: block;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Enhanced loading spinner */
+        .status .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: currentColor;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        /* Status icons */
+        .status-icon {
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+            animation: statusIconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusIconPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Success animation */
+        .status.complete .status-icon {
+            animation: successBounce 0.6s ease-out;
+        }
+
+        @keyframes successBounce {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* Error shake animation */
+        .status.error {
+            animation: errorShake 0.5s ease-in-out;
+        }
+
+        @keyframes errorShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
 
         .results-container {
@@ -866,7 +1079,7 @@
         <div class="header">
   
             <h1>
-                <a href="{{ frontend_url }}" style="text-decoration: none; color: inherit; display: inline-flex; align-items: center; cursor: pointer;">
+                <a href="{{ frontend_url }}" style="text-decoration: none; color: inherit; cursor: pointer;">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; margin-right: 10px;">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"></path>
@@ -994,6 +1207,38 @@
         const statusDiv = document.getElementById('status');
         const resultsDiv = document.getElementById('results');
         const queryHint = document.getElementById('queryHint');
+
+        // Enhanced status management utility
+        function showStatus(type, title, subtitle = '', icon = null) {
+            statusDiv.className = `status ${type} show`;
+            
+            let iconHTML = '';
+            if (icon) {
+                iconHTML = `<span class="status-icon">${icon}</span>`;
+            } else if (type === 'searching' || type === 'info') {
+                iconHTML = '<div class="spinner"></div>';
+            } else {
+                // Default icons for each type
+                const defaultIcons = {
+                    success: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+                    complete: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+                    error: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+                    warning: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><triangle path="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></triangle><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>'
+                };
+                iconHTML = `<span class="status-icon">${defaultIcons[type] || ''}</span>`;
+            }
+            
+            const subtitleHTML = subtitle ? `<br><small>${subtitle}</small>` : '';
+            statusDiv.innerHTML = `${iconHTML}<strong>${title}</strong>${subtitleHTML}`;
+        }
+
+        // Hide status with animation
+        function hideStatus() {
+            statusDiv.className = 'status';
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 300);
+        }
 
         // Update download manager UI
         function updateDownloadManager() {
@@ -1190,8 +1435,6 @@
 
         // Add download to queue
         function queueDownload(url, title, button, useAdvanced = false) {
-            console.log(`➕ Adding to queue: "${title}"`);
-            
             const queueItem = {
                 url,
                 title,
@@ -1207,8 +1450,6 @@
             }
             
             downloadQueue.push(queueItem);
-            
-            console.log(`✅ Added to queue. Queue length: ${downloadQueue.length}, Position: ${downloadQueue.length}`);
             
             // Update button to show queued status
             button.disabled = true;
@@ -1233,12 +1474,8 @@
 
         // Process download queue
         function processQueue() {
-            console.log(`🔄 Processing queue: ${downloadQueue.length} items, ${activeDownloads}/${MAX_CONCURRENT_DOWNLOADS} active`);
-            
             while (activeDownloads < MAX_CONCURRENT_DOWNLOADS && downloadQueue.length > 0) {
                 const item = downloadQueue.shift();
-                
-                console.log(`▶️ Starting queued download: "${item.title}"`);
                 
                 // Find and update the button status
                 const button = document.getElementById(item.buttonId);
@@ -1255,8 +1492,6 @@
                 updateDownloadManager();
                 updateDownloadBadge();
             }
-            
-            console.log(`✅ Queue processed. Remaining: ${downloadQueue.length} items, ${activeDownloads} active`);
         }
 
         // Theme Toggle
@@ -1286,9 +1521,6 @@
                 document.getElementById('themeText').textContent = 'Light';
             }
 
-            // NO download persistence - always start fresh
-            console.log('🆕 Fresh start - No download history');
-
             // Check for URL parameters and auto-search
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('q');
@@ -1299,7 +1531,6 @@
                 if (type) {
                     searchType = type;
                     // Update button UI to reflect the type from URL
-                    console.log(`🔄 Setting search type from URL: ${type}`);
                     selectSearchType(type);
                 }
                 // Auto-trigger search
@@ -1309,7 +1540,6 @@
             } else if (type) {
                 // Even without query, if type is specified, update the button
                 searchType = type;
-                console.log(`🔄 Setting search type from URL (no query): ${type}`);
                 selectSearchType(type);
             }
         });
@@ -1418,11 +1648,11 @@
             
             // Update search button text
             const btnText = {
-                'music': '🔍 Search Music',
-                'video': '🔍 Search Videos',
-                'all': '🔍 Search All Sources'
+                'music': 'Search Music',
+                'video': 'Search Videos',
+                'all': 'Search All Sources'
             };
-            searchBtn.innerHTML = btnText[type] || '🔍 Search';
+            searchBtn.innerHTML = btnText[type] || 'Search';
             
             // Update URL if there's an active search
             const query = searchInput.value.trim();
@@ -1456,11 +1686,7 @@
             
             // If it's a URL but NOT a music URL, show error and stop
             if (isAnyUrl && !isMusicUrl) {
-                statusDiv.className = 'status';
-                statusDiv.style.display = 'block';
-                statusDiv.style.background = 'rgba(231, 76, 60, 0.2)';
-                statusDiv.style.border = '2px solid rgba(231, 76, 60, 0.5)';
-                statusDiv.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 8px; vertical-align: middle;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg><strong>Invalid URL!</strong> Only music platform URLs are supported (YouTube, SoundCloud, JioSaavn, Spotify, etc.)';
+                showStatus('error', 'Invalid URL!', 'Only music platform URLs are supported (YouTube, SoundCloud, JioSaavn, Spotify, etc.)');
                 return;
             }
 
@@ -1479,12 +1705,11 @@
             }
             selectedSongs.clear();
 
-            // Show searching status
-            statusDiv.className = 'status searching';
+            // Show searching status with improved styling
             if (isMusicUrl) {
-                statusDiv.innerHTML = '<div class="spinner"></div> Validating URL...';
+                showStatus('searching', 'Validating URL...', 'Checking music platform compatibility');
             } else {
-                statusDiv.innerHTML = '<div class="spinner"></div> Searching all sources...';
+                showStatus('searching', 'Searching all sources...', 'Finding the best matches for your query');
             }
 
             // Disable search button
@@ -1510,9 +1735,7 @@
                 pollSearchResults();
 
             } catch (error) {
-                console.error('Search error:', error);
-                statusDiv.className = 'status';
-                statusDiv.innerHTML = '❌ Search failed. Please try again.';
+                showStatus('error', 'Search failed!', 'Please check your connection and try again');
                 searchBtn.disabled = false;
             }
         }
@@ -1526,20 +1749,21 @@
 
                 if (data.status === 'complete') {
                     displayResults(data);
-                    statusDiv.className = 'status complete';
+                    statusDiv.className = 'status complete show';
                     
-                    // Calculate total with direct URL
+                    // Calculate total with all sources including SoundCloud
                     const total = (data.ytmusic?.length || 0) + 
                                  (data.ytvideo?.length || 0) + 
                                  (data.jiosaavn?.length || 0) + 
+                                 (data.soundcloud?.length || 0) + 
                                  (data.direct_url?.length || 0);
                     
                     if (data.query_type === 'url') {
                         statusDiv.innerHTML = total > 0 ? 
-                            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 5px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Info extracted successfully!' : 
-                            '⚠️ Could not extract info from URL';
+                            '<span class="status-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><strong>Info extracted successfully!</strong><br><small>Ready to download your content</small>' : 
+                            '<span class="status-icon">⚠️</span><strong>Could not extract info from URL</strong><br><small>Please check the URL and try again</small>';
                     } else {
-                        statusDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 5px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Search complete! Found ${total} results`;
+                        statusDiv.innerHTML = `<span class="status-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><strong>Search complete!</strong><br><small>Found ${total} result${total !== 1 ? 's' : ''} across all sources</small>`;
                     }
                     
                     searchBtn.disabled = false;
@@ -1548,7 +1772,8 @@
                     setTimeout(pollSearchResults, 500);
                 }
             } catch (error) {
-                console.error('Polling error:', error);
+                statusDiv.className = 'status error show';
+                statusDiv.innerHTML = '<span class="status-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></span><strong>Connection lost!</strong><br><small>Unable to fetch search results</small>';
                 searchBtn.disabled = false;
             }
         }
@@ -1559,7 +1784,8 @@
             // Check if it's a direct URL result
             if (data.query_type === 'url' && data.direct_url && data.direct_url.length > 0) {
                 // Show loading state immediately
-                statusDiv.innerHTML = '<div class="loading-spinner">🔍 Processing URL...</div>';
+                statusDiv.className = 'status info show';
+                statusDiv.innerHTML = '<div class="spinner"></div><strong>Processing URL...</strong><br><small>Extracting media information</small>';
                 
                 // Scroll to results area immediately
                 resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1591,7 +1817,8 @@
                 resultsDiv.appendChild(section);
                 
                 // Update status and scroll to final result
-                statusDiv.innerHTML = '<div style="color: var(--success-color); padding: 10px;">✅ Ready to download!</div>';
+                statusDiv.className = 'status complete show';
+                statusDiv.innerHTML = '<span class="status-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><strong>Ready to download!</strong><br><small>All options configured and ready</small>';
                 
                 // Smooth scroll to the results
                 setTimeout(() => {
@@ -1676,10 +1903,9 @@
                 
                 if (previewResponse.ok) {
                     previewData = await previewResponse.json();
-                    console.log('📊 Preview data:', previewData);
                 }
             } catch (error) {
-                console.warn('Could not fetch preview:', error);
+                // Could not fetch preview
             }
 
             // Determine if this is a video or music URL based on searchType parameter
@@ -1699,7 +1925,7 @@
                 }
             }
             
-            console.log(`🎯 URL Mode detected: ${urlMode} (searchType: ${searchType}) for ${info.url}`);
+            // URL Mode detection and preview HTML building continues...
 
             // Build preview HTML
             let previewHTML = '';
@@ -1717,8 +1943,8 @@
                         <div>
                             <h3 style="font-size: 1.6em; margin-bottom: 12px; color: var(--text-primary); line-height: 1.3;">${previewData.title}</h3>
                             <div style="color: var(--text-secondary); margin-bottom: 15px;">
-                                <p style="margin: 5px 0;"><strong>👤 Channel:</strong> ${previewData.uploader || previewData.channel}</p>
-                                <p style="margin: 5px 0;"><strong>🔗 Source:</strong> ${previewData.source || info.source}</p>
+                                <p style="margin: 5px 0;"><strong> Channel:</strong> ${previewData.uploader || previewData.channel}</p>
+                                <p style="margin: 5px 0;"><strong> Source:</strong> ${previewData.source || info.source}</p>
                             </div>
                         </div>
                     </div>
@@ -1728,8 +1954,8 @@
                 previewHTML = `
                     <div style="margin-bottom: 20px;">
                         <h3 style="font-size: 1.6em; margin-bottom: 12px; color: var(--text-primary);">${previewData.title}</h3>
-                        <p style="color: var(--text-secondary); margin: 5px 0;"><strong>👤 Channel:</strong> ${previewData.uploader || previewData.channel}</p>
-                        <p style="color: var(--text-secondary); margin: 5px 0;"><strong>🔗 Source:</strong> ${previewData.source || info.source}</p>
+                        <p style="color: var(--text-secondary); margin: 5px 0;"><strong> Channel:</strong> ${previewData.uploader || previewData.channel}</p>
+                        <p style="color: var(--text-secondary); margin: 5px 0;"><strong> Source:</strong> ${previewData.source || info.source}</p>
                     </div>
                 `;
             } else {
@@ -1759,7 +1985,7 @@
                     <!-- Download Options with Tabs -->
                     <div style="margin-bottom: 20px;">
                         <button class="advanced-toggle" onclick="toggleAdvanced()" style="width: 100%; text-align: center; margin-bottom: 10px;">
-                            ⚙️ <span id="advancedToggleText">Show Download Options</span>
+                             <span id="advancedToggleText">Show Download Options</span>
                         </button>
                         <div id="advancedOptions" class="advanced-options">
                             <!-- Tab Headers -->
@@ -2001,7 +2227,7 @@
 
                     <button class="download-btn" style="width: 100%; padding: 15px; font-size: 1.2em; font-weight: bold;" 
                             onclick="downloadSong('${info.url}', 'Downloaded_File', this, true)">
-                        ⬇️ Download Now
+                        Download Now
                     </button>
                 </div>
             `;
@@ -2089,7 +2315,7 @@
                 ${metadataHTML}
                 <div class="song-actions" style="display: flex; gap: 5px;">
                     <button id="${buttonId}" class="download-btn" style="flex: 1;" onclick="downloadSong('${song.url}', '${song.title.replace(/'/g, "\\'")}', this)">
-                        ⬇️ Download
+                        Download
                     </button>
                     <button 
                         id="${advancedBtnId}" 
@@ -2107,34 +2333,25 @@
         }
 
         async function downloadSong(url, title, button, useAdvanced = false) {
-            console.log(`📥 Download requested: "${title}"`);
-            console.log(`   Active downloads: ${activeDownloads}/${MAX_CONCURRENT_DOWNLOADS}`);
-            console.log(`   Queue length: ${downloadQueue.length}`);
-            
             // Check if download should be queued
             if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
-                console.log(`⏸️ Max concurrent downloads reached. Adding to queue...`);
                 queueDownload(url, title, button, useAdvanced);
                 return;
             }
 
             // Start download immediately
-            console.log(`▶️ Starting download immediately...`);
             activeDownloads++;
             startDownload(url, title, useAdvanced, button);
         }
 
         // Open advanced download options for song search results
         function openAdvancedDownload(url, title, button) {
-            console.log(`⚙️ Opening advanced options for: "${title}"`);
-            
             // Set search input to the URL
             const searchInput = document.getElementById('searchInput');
             searchInput.value = url;
             
             // Don't change searchType - preserve the current user selection
             // The searchType should remain as currently selected (music/video/all)
-            console.log(`🎯 Preserving searchType: ${searchType}`);
             
             // Update button states to reflect current searchType
             document.querySelectorAll('.type-btn').forEach(btn => {
@@ -2269,7 +2486,6 @@
                 }
 
             } catch (error) {
-                console.error('Download error:', error);
                 if (button) {
                     button.className = 'download-btn';
                     button.innerHTML = '❌ Failed';
@@ -2288,8 +2504,6 @@
             
             // Safety check: stop polling after too many attempts
             if (attemptCount >= MAX_ATTEMPTS) {
-                console.error(`⏱️ Download polling timeout for "${title}" after ${attemptCount} attempts`);
-                
                 if (button) {
                     button.className = 'download-btn';
                     button.innerHTML = '⏱️ Timeout';
@@ -2320,8 +2534,6 @@
                 updateDownloadBadge();
 
                 if (data.status === 'complete') {
-                    console.log(`✅ Download complete: "${title}"`);
-                    
                     if (button) {
                         button.className = 'download-btn complete';
                         button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 5px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Downloaded';
@@ -2342,11 +2554,9 @@
                     
                     // Download finished, process next in queue
                     activeDownloads--;
-                    console.log(`📉 Download finished. Active: ${activeDownloads}, Queue: ${downloadQueue.length}`);
                     processQueue();
                     
                 } else if (data.status === 'error') {
-                    console.log(`❌ Download failed: "${title}" - ${data.error}`);
                     
                     if (button) {
                         button.className = 'download-btn';
@@ -2357,12 +2567,9 @@
                     
                     // Download finished (failed), process next in queue
                     activeDownloads--;
-                    console.log(`📉 Download failed. Active: ${activeDownloads}, Queue: ${downloadQueue.length}`);
                     processQueue();
                     
                 } else if (data.status === 'cancelled') {
-                    console.log(`🚫 Download cancelled: "${title}"`);
-                    
                     if (button) {
                         button.className = 'download-btn';
                         button.innerHTML = '🚫 Cancelled';
@@ -2371,7 +2578,6 @@
                     
                     // Download cancelled, process next in queue
                     activeDownloads--;
-                    console.log(`📉 Download cancelled. Active: ${activeDownloads}, Queue: ${downloadQueue.length}`);
                     processQueue();
                     
                 } else if (data.status === 'downloading') {
@@ -2397,8 +2603,6 @@
                     setTimeout(() => pollDownloadStatus(downloadId, button, title, attemptCount + 1), 1000);
                 }
             } catch (error) {
-                console.error('Status check error:', error);
-                
                 // Check if it's a network error or timeout
                 const errorMessage = error.message || 'Unknown error';
                 
@@ -2471,7 +2675,6 @@
                 const url = e.target.getAttribute('data-song-url');
                 const title = e.target.getAttribute('data-song-title');
                 
-                console.log('🎯 Advanced button clicked!', { url, title });
                 openAdvancedDownload(url, title, e.target);
             }
         });
