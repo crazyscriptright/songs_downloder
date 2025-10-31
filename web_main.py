@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Import our custom modules
 try:
     from ytmusic_dynamic_tokens import YouTubeMusicAPI
     from ytmusic_dynamic_video_tokens import YouTubeMusicVideoAPI
@@ -51,13 +50,13 @@ def get_apis():
         ytmusic_api = YouTubeMusicAPI(
             cache_file=UNIFIED_CACHE_FILE,
             cache_duration_hours=2,
-            headless=True  # Run browser in background
+            headless=True
         )
     if not ytvideo_api:
         ytvideo_api = YouTubeMusicVideoAPI(
             cache_file=UNIFIED_CACHE_FILE,
             cache_duration_hours=2,
-            headless=True  # Run browser in background
+            headless=True
         )
     if not jiosaavn_api:
         jiosaavn_api = JioSaavnAPI()
@@ -69,7 +68,6 @@ def load_persistent_data():
     """Start fresh without persistence"""
     global download_status
     download_status = {}
-    print("🆕 Starting with clean download status")
 
 
 def save_download_status():
@@ -86,7 +84,7 @@ def cleanup_old_downloads():
         for download_id, status in download_status.items():
             if 'timestamp' in status:
                 download_time = datetime.fromisoformat(status['timestamp'])
-                if (current_time - download_time).total_seconds() > 86400:  # 24 hours
+                if (current_time - download_time).total_seconds() > 86400:
                     if status.get('status') in ['complete', 'error', 'cancelled']:
                         to_remove.append(download_id)
         
@@ -94,7 +92,6 @@ def cleanup_old_downloads():
             del download_status[download_id]
         
         if to_remove:
-            print(f"🧹 Cleaned up {len(to_remove)} old download records")
             save_download_status()
     
     except Exception as e:
@@ -131,7 +128,6 @@ def search_ytvideo(query):
     try:
         _, ytvideo, _ = get_apis()
         
-        # use_fresh_tokens=True means "use cache if available" (inverted naming in API)
         data = ytvideo.search_videos(query, use_fresh_tokens=True, retry_on_error=True)
         
         videos = ytvideo.parse_video_results(data) if data else []
@@ -162,7 +158,6 @@ def search_jiosaavn(query):
         songs = jiosaavn.parse_results(data) if data else []
         
         for song in songs:
-            # Get artist info - try multiple fields
             artist = (
                 song.get('primary_artists') or 
                 song.get('singers') or 
@@ -195,21 +190,17 @@ def search_soundcloud(query):
     """Search SoundCloud with unified cache"""
     results = []
     try:
-        # Use the updated soundcloud module with unified cache
         tracks = soundcloud.soundcloud_search(query, limit=20)
         
         for track in tracks:
-            # Format duration
             duration_ms = track.get('duration_ms', 0)
             if duration_ms:
                 duration = f"{duration_ms // 60000}:{(duration_ms % 60000) // 1000:02d}"
             else:
                 duration = "0:00"
             
-            # Get artwork URL (SoundCloud returns it but may need higher resolution)
             artwork_url = track.get('artwork_url', '')
             if artwork_url:
-                # Replace small image with larger version for better quality
                 artwork_url = artwork_url.replace('-large.', '-t500x500.')
             
             results.append({
@@ -235,7 +226,6 @@ def search_soundcloud(query):
 
 def is_url(query):
     """Check if query is a MUSIC-related URL (not just any URL)"""
-    # Only detect URLs from supported music platforms
     music_url_patterns = [
         r'youtube\.com/watch',
         r'youtu\.be/',
@@ -264,7 +254,6 @@ def validate_url_simple(url):
     
     for pattern in supported_patterns:
         if re.search(pattern, url, re.IGNORECASE):
-            # Determine source
             if 'soundcloud.com' in url.lower():
                 source = "SoundCloud"
             elif 'jiosaavn.com' in url.lower() or 'saavn.com' in url.lower():
@@ -274,7 +263,6 @@ def validate_url_simple(url):
             else:
                 source = "YouTube"
             
-            # Check if URL contains a playlist
             is_playlist = bool(re.search(r'[?&]list=([^&]+)', url))
             playlist_id = None
             if is_playlist:
@@ -327,15 +315,11 @@ def search_all_sources(query, search_id, search_type='music'):
         'query_type': 'url' if is_url(query) else 'search'
     }
     
-    # If it's a URL, validate and extract info directly
     if is_url(query):
-        print(f"🔗 Direct URL detected: {query}")
         
-        # Simple validation - just check if it's supported
         all_results['status'] = 'validating'
         search_results[search_id] = all_results
         
-        # Validate URL (instant, no external calls)
         video_info = validate_url_simple(query)
         
         if video_info and video_info.get('is_valid'):
@@ -351,7 +335,6 @@ def search_all_sources(query, search_id, search_type='music'):
         search_results[search_id] = all_results
         return all_results
     
-    # Otherwise, search based on type
     threads = []
     results_lock = threading.Lock()
     
@@ -363,7 +346,6 @@ def search_all_sources(query, search_id, search_type='music'):
         except Exception as e:
             print(f"Error searching {source_name}: {e}")
     
-    # Create threads based on search type
     if search_type == 'music':
         # Search music sources
         t1 = threading.Thread(target=search_and_store, args=('ytmusic', search_ytmusic))
@@ -382,7 +364,6 @@ def search_all_sources(query, search_id, search_type='music'):
         t4 = threading.Thread(target=search_and_store, args=('soundcloud', search_soundcloud))
         threads = [t1, t2, t3, t4]
     
-    # Start all threads
     for t in threads:
         t.start()
     
@@ -393,7 +374,6 @@ def search_all_sources(query, search_id, search_type='music'):
     all_results['status'] = 'complete'
     all_results['timestamp'] = datetime.now().isoformat()
     
-    # Store results
     search_results[search_id] = all_results
     
     return all_results
@@ -525,7 +505,7 @@ def download_song(url, title, download_id, advanced_options=None):
                 # SECURITY: Block shell operators in custom args
                 for dangerous_char in DANGEROUS_CHARS:
                     if dangerous_char in custom_args:
-                        print(f"⚠️ SECURITY: Blocked custom args with dangerous character '{dangerous_char}'")
+                        # Security: Block dangerous characters
                         custom_args = ''  # Clear the dangerous input
                         break
                 
@@ -546,16 +526,15 @@ def download_song(url, title, download_id, advanced_options=None):
                         '--max-downloads',
                         
                         # Quality & Format
+                        '--windows-filenames',
                         '--format-sort',
                         '--prefer-free-formats',
                         
-                        # Download limits
                         '--max-filesize',
                         '--min-filesize',
                         '--limit-rate',
                         '--throttled-rate',
                         
-                        # Retry & Error handling
                         '--retries',
                         '--fragment-retries',
                         '--skip-unavailable-fragments',
@@ -576,7 +555,6 @@ def download_song(url, title, download_id, advanced_options=None):
                         '--xattrs',
                         '--concat-playlist',
                         
-                        # File System
                         '--no-overwrites',
                         '--continue',
                         '--no-continue',
@@ -605,17 +583,17 @@ def download_song(url, title, download_id, advanced_options=None):
                             # Additional security: check each arg for dangerous chars
                             has_danger = any(dc in arg for dc in DANGEROUS_CHARS)
                             if has_danger:
-                                print(f"⚠️ SECURITY: Blocked argument with dangerous character: {arg}")
+                                # Security: Block dangerous argument
                                 continue
                             
                             # Only allow whitelisted arguments
                             arg_name = arg.split('=')[0] if '=' in arg else arg
                             if arg_name in SAFE_ARGS:
                                 cmd.append(arg)
-                            else:
-                                print(f"⚠️ SECURITY: Blocked unsafe argument: {arg}")
+                            # Security: Block unsafe argument
                     except Exception as e:
-                        print(f"⚠️ SECURITY: Failed to parse custom args (ignored): {e}")
+                        # Security: Failed to parse custom args (ignored)
+                        pass
         else:
             # Default: Audio download with best quality and metadata
             cmd.extend([
@@ -635,11 +613,7 @@ def download_song(url, title, download_id, advanced_options=None):
             url
         ])
         
-        print(f"🎵 Download command: {' '.join(cmd)}")
         
-        # SECURITY: Run with real-time output parsing at LOW PRIORITY
-        # IMPORTANT: shell=False prevents command injection (default, but explicit)
-        # Set process creation flags for low priority
         creation_flags = 0
         if os.name == 'nt':  # Windows
             creation_flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS
@@ -657,13 +631,12 @@ def download_song(url, title, download_id, advanced_options=None):
         # Store process for potential cancellation
         active_processes[download_id] = process
         
-        # Set process to low priority on Linux/Mac
         if os.name != 'nt':
             try:
                 import resource
-                os.setpriority(os.PRIO_PROCESS, process.pid, 10)  # Lower priority
+                os.setpriority(os.PRIO_PROCESS, process.pid, 10)
             except Exception as e:
-                print(f"Warning: Could not set process priority: {e}")
+                pass
         
         # Track error messages from yt-dlp
         error_messages = []
@@ -678,13 +651,12 @@ def download_song(url, title, download_id, advanced_options=None):
                 break
                 
             line = line.strip()
-            print(line)  # Debug output
+            # Skip printing every line for cleaner output
             
             # Detect ERROR messages from yt-dlp
             if 'ERROR:' in line:
                 error_msg = line.replace('ERROR:', '').strip()
                 error_messages.append(error_msg)
-                print(f"⚠️ yt-dlp ERROR detected: {error_msg}")
             
             # Detect common error patterns
             error_patterns = [
@@ -705,7 +677,6 @@ def download_song(url, title, download_id, advanced_options=None):
             
             if any(pattern.lower() in line.lower() for pattern in error_patterns):
                 error_messages.append(line)
-                print(f"⚠️ Error pattern detected: {line}")
             
             # Parse download progress: [download]  45.2% of 3.50MiB at 1.23MiB/s ETA 00:02
             if '[download]' in line and '%' in line:
@@ -736,7 +707,7 @@ def download_song(url, title, download_id, advanced_options=None):
                         }
                         save_download_status()
                 except Exception as parse_err:
-                    print(f"Parse error: {parse_err}")
+                    # Parsing error - continue processing
                     pass
         
         # Clean up process reference
@@ -753,7 +724,6 @@ def download_song(url, title, download_id, advanced_options=None):
         if error_messages:
             # Combine error messages
             error_text = ' | '.join(error_messages[:3])  # Limit to first 3 errors
-            print(f"❌ Download failed with errors: {error_text}")
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
@@ -895,7 +865,6 @@ def search():
     # Detect if it's a URL
     query_type = 'url' if is_url(query) else 'search'
     
-    # Start background search
     thread = threading.Thread(
         target=search_all_sources,
         args=(query, search_id, search_type)
@@ -965,7 +934,6 @@ def download():
     # Generate download ID
     download_id = f"download_{datetime.now().timestamp()}"
     
-    # Start background download
     thread = threading.Thread(
         target=download_song,
         args=(url, title, download_id, advanced_options)
@@ -1148,7 +1116,8 @@ def preview_url():
                             
                             return jsonify(preview_data)
                 except Exception as e:
-                    print(f"YouTube API preview error: {e}")
+                    # YouTube API preview error - continue with fallback
+                    pass
                 
                 # Fallback: Return basic info with video ID
                 preview_data = {
@@ -1164,7 +1133,8 @@ def preview_url():
                 return jsonify(preview_data)
                 
             except Exception as e:
-                print(f"YouTube preview error: {e}")
+                # YouTube preview error - continue with basic info
+                pass
         
         # For non-YouTube URLs or if YouTube preview failed, return basic info
         # Determine source
@@ -1211,11 +1181,8 @@ def proxy_image():
 
 
 if __name__ == '__main__':
-    print("="*70)
-    print("🎵 Universal Music Downloader - Web Interface (Enhanced)")
-    print("="*70)
-    print(f"📁 Download folder: {app.config['DOWNLOAD_FOLDER']}")
-    print(f"💾 Unified cache file: {UNIFIED_CACHE_FILE}")
+    print("🎵 Universal Music Downloader")
+    print(f"📁 Downloads: {app.config['DOWNLOAD_FOLDER']}")
     print(f"� Download status file: {DOWNLOAD_STATUS_FILE}")
     print(f"�🕐 Cache duration: 2 hours")
     print(f"🌐 Browser mode: Headless (background)")
@@ -1224,5 +1191,4 @@ if __name__ == '__main__':
     load_persistent_data()
     cleanup_old_downloads()
     
-    print("🌐 Server: http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
