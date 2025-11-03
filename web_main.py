@@ -1793,4 +1793,4 @@ if __name__ == '__main__':
     load_persistent_data()
     cleanup_old_downloads()
 
-    app.run(debug=True, port=os.getenv('PORT'), threaded=True)
+    app.run(debug=False, port=os.getenv('PORT'), threaded=True)
