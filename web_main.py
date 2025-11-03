@@ -19,6 +19,7 @@ try:
     from ytmusic_dynamic_video_tokens import YouTubeMusicVideoAPI
     from jiosaavn_search import JioSaavnAPI
     import soundcloud
+    from bs4 import BeautifulSoup  # Add BeautifulSoup for JioSaavn URL extraction
 except ImportError as e:
     print(f"⚠ Import Error: {e}")
     print("Make sure all required modules are in the same directory!")
@@ -146,6 +147,340 @@ def search_ytvideo(query):
         print(f"YT Video error: {e}")
     
     return results
+
+
+def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
+    """Extract metadata from SoundCloud URL including main track and recommendations"""
+    print(f"🎯 Starting SoundCloud extraction for: {soundcloud_url}")
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        
+        # Convert desktop URL to mobile URL for better compatibility
+        if soundcloud_url.startswith("https://soundcloud.com/"):
+            mobile_url = soundcloud_url.replace("https://soundcloud.com/", "https://m.soundcloud.com/")
+            url = mobile_url
+            print(f"📱 Converted to mobile URL: {url}")
+        else:
+            url = soundcloud_url
+        
+        print(f"🌐 Making request to: {url}")
+        response = requests.get(url, headers=headers, timeout=10)
+        print(f"📡 Response status: {response.status_code}")
+        if response.status_code != 200:
+            print(f"❌ Bad response status: {response.status_code}")
+            return None
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Find script tags containing tracks data
+        tracks_scripts = []
+        for i, script in enumerate(soup.find_all("script")):
+            if script.string and '"tracks":' in script.string:
+                tracks_scripts.append((i, script))
+        
+        if tracks_scripts:
+            # Sort by script length and pick the largest one
+            tracks_scripts.sort(key=lambda x: len(x[1].string), reverse=True)
+            script_index, script_tag = tracks_scripts[0]
+        else:
+            # Fallback: look for large scripts
+            script_tag = None
+            for script in soup.find_all("script"):
+                if script.string and len(script.string) > 50000:
+                    script_content = script.string.lower()
+                    if any(keyword in script_content for keyword in ['soundcloud', 'track', 'audio']):
+                        script_tag = script
+                        break
+        
+        if not script_tag:
+            return None
+        
+        # Parse JSON data
+        try:
+            data = json.loads(script_tag.string)
+            
+            # Try different structures for tracks data
+            tracks_data = None
+            users_data = None  # Add users data for artist name lookup
+            
+            # Method 1: Mobile/new structure
+            initial_store = data.get("props", {}).get("pageProps", {}).get("initialStoreState", {})
+            entities = initial_store.get("entities", {})
+            if entities and "tracks" in entities:
+                tracks_data = entities.get("tracks", {})
+                users_data = entities.get("users", {})  # Get users data too
+                print("Found tracks using mobile/new structure")
+            
+            # Method 2: Direct tracks access
+            elif "tracks" in data:
+                tracks_data = data.get("tracks", {})
+                users_data = data.get("users", {})  # Try to get users too
+                print("Found tracks using direct access")
+            
+            # Method 3: Recursive search
+            else:
+                def find_tracks_recursive(obj):
+                    if isinstance(obj, dict):
+                        if "tracks" in obj and isinstance(obj["tracks"], dict):
+                            tracks_obj = obj["tracks"]
+                            if any(key.startswith("soundcloud:tracks") for key in tracks_obj.keys()):
+                                return tracks_obj
+                        for value in obj.values():
+                            result = find_tracks_recursive(value)
+                            if result:
+                                return result
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            result = find_tracks_recursive(item)
+                            if result:
+                                return result
+                    return None
+                
+                tracks_data = find_tracks_recursive(data)
+            
+            if not tracks_data:
+                return None
+            
+            # Extract SoundCloud tracks
+            soundcloud_tracks = []
+            for key, value in tracks_data.items():
+                if key.startswith("soundcloud:tracks"):
+                    track_data = value.get("data", {})
+                    
+                    # Debug track data structure
+                    print(f"🔍 Processing track: {key}")
+                    print(f"📊 Track data keys: {list(track_data.keys())}")
+                    
+                    # Format duration
+                    duration_ms = track_data.get('duration', 0)
+                    duration_str = "0:00"
+                    if duration_ms:
+                        minutes = duration_ms // 60000
+                        seconds = (duration_ms % 60000) // 1000
+                        duration_str = f"{minutes}:{seconds:02d}"
+                    
+                    # Format counts
+                    plays = track_data.get('playback_count', 0)
+                    likes = track_data.get('likes_count', 0)                    # Extract artist name - try multiple fields
+                    artist_name = "Unknown Artist"
+                    
+                    # First try direct user field
+                    if 'user' in track_data and isinstance(track_data['user'], dict):
+                        artist_name = track_data['user'].get('username', 'Unknown Artist')
+                        print(f"👤 Found user.username: {artist_name}")
+                    elif 'uploader' in track_data:
+                        artist_name = track_data['uploader']
+                        print(f"👤 Found uploader: {artist_name}")
+                    elif 'artist' in track_data:
+                        artist_name = track_data['artist']
+                        print(f"👤 Found artist: {artist_name}")
+                    else:
+                        # Try to find user via user_id lookup in users_data
+                        user_id = track_data.get('user_id')
+                        if user_id and users_data:
+                            print(f"💳 Found user_id: {user_id}, looking up in users data...")
+                            
+                            # Look for user in users_data by user_id
+                            user_key = f"soundcloud:users:{user_id}"
+                            if user_key in users_data:
+                                user_info = users_data[user_key].get('data', {})
+                                artist_name = user_info.get('username', user_info.get('display_name', 'Unknown Artist'))
+                                print(f"✅ Found artist via user lookup: {artist_name}")
+                            else:
+                                # Try direct user_id lookup
+                                for key, user_data in users_data.items():
+                                    if key.startswith("soundcloud:users:"):
+                                        user_info = user_data.get('data', {})
+                                        if user_info.get('id') == user_id:
+                                            artist_name = user_info.get('username', user_info.get('display_name', 'Unknown Artist'))
+                                            print(f"✅ Found artist via ID match: {artist_name}")
+                                            break
+                                
+                                if artist_name == "Unknown Artist":
+                                    print(f"❌ Could not find user {user_id} in users data")
+                                    print(f"🔍 Available user keys: {list(users_data.keys())[:5] if users_data else 'None'}")
+                        elif user_id:
+                            print(f"💳 Found user_id: {user_id} but no users_data available")
+                        else:
+                            print("❌ No user_id found in track data")
+                    
+                    print(f"🎤 Final Artist: {artist_name}")
+                    print(f"🎵 Title: {track_data.get('title', 'Unknown')}")
+                    
+                    soundcloud_tracks.append({
+                        'id': key,
+                        'title': track_data.get('title', 'Unknown'),
+                        'artist': artist_name,
+                        'url': track_data.get('permalink_url', soundcloud_url),
+                        'thumbnail': track_data.get('artwork_url', ''),
+                        'duration': duration_str,
+                        'plays': plays,
+                        'likes': likes,
+                        'genre': track_data.get('genre', ''),
+                        'created_at': track_data.get('created_at', ''),
+                        'source': 'SoundCloud'
+                    })
+            
+            if soundcloud_tracks:
+                return {
+                    'main_track': soundcloud_tracks[0] if soundcloud_tracks else None,
+                    'recommended_tracks': soundcloud_tracks[1:] if len(soundcloud_tracks) > 1 else [],
+                    'total_tracks': len(soundcloud_tracks)
+                }
+            
+        except json.JSONDecodeError:
+            return None
+        except Exception:
+            return None
+            
+    except Exception as e:
+        print(f"SoundCloud metadata extraction error: {e}")
+        return None
+
+
+def extract_jiosaavn_metadata(jiosaavn_url):
+    """Extract metadata from JioSaavn URL using web scraping"""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        response = requests.get(jiosaavn_url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return None
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        metadata = {}
+        
+        # Extract image source
+        img_element = soup.find("img", {"id": "songHeaderImage"})
+        if img_element:
+            metadata['thumbnail'] = img_element.get("src")
+        
+        # Extract song title
+        song_title_element = soup.find("h1", class_="u-h2 u-margin-bottom-tiny@sm")
+        if song_title_element:
+            song_title = song_title_element.get_text(strip=True)
+            # Remove "Lyrics" suffix if present
+            if song_title.endswith("Lyrics"):
+                song_title = song_title[:-6].strip()
+            metadata['title'] = song_title
+        
+        # Extract album name and artists
+        album_para = soup.find("p", class_="u-color-js-gray u-ellipsis@lg u-margin-bottom-tiny@sm")
+        if album_para:
+            # Extract album
+            album_link = album_para.find("a", {"screen_name": "song_screen", "href": lambda x: x and "/album/" in x})
+            if album_link:
+                metadata['album'] = album_link.get_text(strip=True)
+            
+            # Extract artists
+            artist_links = album_para.find_all("a", {"screen_name": "song_screen", "href": lambda x: x and "/artist/" in x})
+            artists = []
+            for link in artist_links:
+                artist_name = link.get_text(strip=True)
+                if artist_name:
+                    artists.append(artist_name)
+            
+            if artists:
+                metadata['artist'] = ", ".join(artists)
+        
+        # Extract PID from page content
+        pid_value = None
+        
+        # Method 1: Search in script tags for JSON containing "pid"
+        script_tags = soup.find_all("script")
+        for script in script_tags:
+            if script.string and '"pid"' in script.string:
+                try:
+                    # Try to find PID using regex pattern
+                    pid_match = re.search(r'"pid"\s*:\s*"([^"]+)"', script.string)
+                    if pid_match:
+                        pid_value = pid_match.group(1)
+                        break
+                    else:
+                        # Try to find PID with single quotes
+                        pid_match = re.search(r"'pid'\s*:\s*'([^']+)'", script.string)
+                        if pid_match:
+                            pid_value = pid_match.group(1)
+                            break
+                except Exception:
+                    continue
+        
+        # Method 2: Search in the entire page source if not found in scripts
+        if not pid_value:
+            page_content = response.text
+            pid_match = re.search(r'"pid"\s*:\s*"([^"]+)"', page_content)
+            if pid_match:
+                pid_value = pid_match.group(1)
+            else:
+                # Try with single quotes
+                pid_match = re.search(r"'pid'\s*:\s*'([^']+)'", page_content)
+                if pid_match:
+                    pid_value = pid_match.group(1)
+        
+        if pid_value:
+            metadata['pid'] = pid_value
+        
+        # Extract language from page content
+        language_value = None
+        
+        # Method 1: Search in script tags for JSON containing "language"
+        for script in script_tags:
+            if script.string and '"language"' in script.string:
+                try:
+                    # Try to find language using regex pattern
+                    language_match = re.search(r'"language"\s*:\s*"([^"]+)"', script.string)
+                    if language_match:
+                        language_value = language_match.group(1)
+                        break
+                    else:
+                        # Try to find language with single quotes
+                        language_match = re.search(r"'language'\s*:\s*'([^']+)'", script.string)
+                        if language_match:
+                            language_value = language_match.group(1)
+                            break
+                except Exception:
+                    continue
+        
+        # Method 2: Search in the entire page source if not found in scripts
+        if not language_value:
+            page_content = response.text
+            language_match = re.search(r'"language"\s*:\s*"([^"]+)"', page_content)
+            if language_match:
+                language_value = language_match.group(1)
+            else:
+                # Try with single quotes
+                language_match = re.search(r"'language'\s*:\s*'([^']+)'", page_content)
+                if language_match:
+                    language_value = language_match.group(1)
+        
+        # Method 3: Extract from URL structure (fallback)
+        if not language_value:
+            # Look for language indicators in URL or page structure
+            if 'english' in jiosaavn_url.lower() or 'english' in response.text.lower():
+                language_value = 'english'
+            elif 'hindi' in jiosaavn_url.lower() or 'hindi' in response.text.lower():
+                language_value = 'hindi'
+            elif 'tamil' in jiosaavn_url.lower() or 'tamil' in response.text.lower():
+                language_value = 'tamil'
+            elif 'telugu' in jiosaavn_url.lower() or 'telugu' in response.text.lower():
+                language_value = 'telugu'
+            elif 'punjabi' in jiosaavn_url.lower() or 'punjabi' in response.text.lower():
+                language_value = 'punjabi'
+        
+        if language_value:
+            metadata['language'] = language_value
+        else:
+            # Default fallback if no language detected
+            metadata['language'] = 'hindi'  # Most common on JioSaavn
+        
+        return metadata
+        
+    except Exception as e:
+        print(f"JioSaavn metadata extraction error: {e}")
+        return None
 
 
 def search_jiosaavn(query):
@@ -408,11 +743,9 @@ def download_song(url, title, download_id, advanced_options=None):
         if not url.startswith(('http://', 'https://')):
             raise ValueError("Only HTTP/HTTPS URLs are allowed")
         
-        # SECURITY: Block shell operators and dangerous characters
-        DANGEROUS_CHARS = ['&&', '||', ';', '|', '`', '$', '(', ')', '<', '>', '\n', '\r', '&']
-        for dangerous_char in DANGEROUS_CHARS:
-            if dangerous_char in url:
-                raise ValueError(f"Security: Dangerous character '{dangerous_char}' detected in URL")
+        # SECURITY: Validate title (prevent dangerous characters in title only)
+        DANGEROUS_CHARS_TITLE = ['&&', '||', ';', '|', '`', '$', '<', '>', '\n', '\r']
+        for dangerous_char in DANGEROUS_CHARS_TITLE:
             if dangerous_char in title:
                 raise ValueError(f"Security: Dangerous character '{dangerous_char}' detected in title")
         
@@ -502,8 +835,9 @@ def download_song(url, title, download_id, advanced_options=None):
             
             # SECURITY: Custom arguments - STRICT WHITELIST ONLY
             if custom_args:
-                # SECURITY: Block shell operators in custom args
-                for dangerous_char in DANGEROUS_CHARS:
+                # SECURITY: Block shell operators in custom args (but allow URLs)
+                DANGEROUS_CHARS_ARGS = ['&&', '||', ';', '|', '`', '$', '\n', '\r']
+                for dangerous_char in DANGEROUS_CHARS_ARGS:
                     if dangerous_char in custom_args:
                         # Security: Block dangerous characters
                         custom_args = ''  # Clear the dangerous input
@@ -878,6 +1212,115 @@ def search():
     })
 
 
+def get_youtube_suggestions(query):
+    """Get search suggestions from YouTube API"""
+    try:
+        import urllib.parse
+        import json
+        
+        # YouTube's suggestion API endpoint
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://suggestqueries.google.com/complete/search?client=youtube&q={encoded_query}"
+        
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            # YouTube returns JSONP format, extract JSON part
+            jsonp_text = response.text
+            if jsonp_text.startswith('window.google.ac.h('):
+                json_text = jsonp_text[19:-1]  # Remove JSONP wrapper
+                data = json.loads(json_text)
+                suggestions = [item[0] for item in data[1][:5]]  # Get first 5 suggestions
+                return suggestions
+    except Exception as e:
+        print(f"YouTube suggestions error: {e}")
+    return []
+
+def get_jiosaavn_suggestions(query):
+    """Get search suggestions from JioSaavn search"""
+    try:
+        # Use JioSaavn search to get relevant song titles
+        from jiosaavn_api import search_songs
+        
+        results = search_songs(query, limit=3)
+        if results and 'data' in results and 'results' in results['data']:
+            suggestions = []
+            for song in results['data']['results'][:3]:
+                if 'title' in song:
+                    title = song['title']
+                    # Clean up the title
+                    if title and len(title) > 3:
+                        suggestions.append(title)
+            return suggestions
+    except Exception as e:
+        print(f"JioSaavn suggestions error: {e}")
+    return []
+
+def get_spotify_suggestions(query):
+    """Get search suggestions using Spotify-like approach"""
+    try:
+        # Use common music search patterns
+        suggestions = [
+            f"{query} song",
+            f"{query} remix",
+            f"{query} cover",
+            f"{query} acoustic",
+            f"{query} live"
+        ]
+        return suggestions[:3]
+    except Exception:
+        return []
+
+
+@app.route('/suggestions')
+def get_suggestions():
+    """Get dynamic search suggestions from multiple APIs"""
+    query = request.args.get('q', '').strip()
+    
+    if not query or len(query) < 2:
+        return jsonify({'suggestions': []})
+    
+    try:
+        all_suggestions = []
+        
+        # Get YouTube suggestions (most reliable)
+        youtube_suggestions = get_youtube_suggestions(query)
+        if youtube_suggestions:
+            all_suggestions.extend(youtube_suggestions[:4])
+        
+        # Get JioSaavn-based suggestions
+        jiosaavn_suggestions = get_jiosaavn_suggestions(query)
+        if jiosaavn_suggestions:
+            all_suggestions.extend(jiosaavn_suggestions[:2])
+        
+        # Add Spotify-like suggestions as fallback
+        spotify_suggestions = get_spotify_suggestions(query)
+        all_suggestions.extend(spotify_suggestions[:2])
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_suggestions = []
+        for suggestion in all_suggestions:
+            suggestion_lower = suggestion.lower().strip()
+            if suggestion_lower not in seen and len(suggestion_lower) > 1:
+                seen.add(suggestion_lower)
+                unique_suggestions.append(suggestion)
+        
+        # Limit to 6 suggestions for better UX
+        final_suggestions = unique_suggestions[:6]
+        
+        return jsonify({'suggestions': final_suggestions})
+        
+    except Exception as e:
+        print(f"❌ Suggestions error: {e}")
+        # Fallback to simple suggestions
+        fallback_suggestions = [
+            f"{query} song",
+            f"{query} music",
+            f"{query} latest"
+        ]
+        return jsonify({'suggestions': fallback_suggestions})
+
+
 @app.route('/search_status/<search_id>')
 def search_status(search_id):
     """Get search status and results"""
@@ -903,11 +1346,9 @@ def download():
     if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
         return jsonify({'error': 'Invalid URL format. Only HTTP/HTTPS URLs are allowed.'}), 400
     
-    # SECURITY: Block shell operators and dangerous characters
-    DANGEROUS_CHARS = ['&&', '||', ';', '|', '`', '$', '(', ')', '<', '>', '\n', '\r', '&']
-    for dangerous_char in DANGEROUS_CHARS:
-        if dangerous_char in url:
-            return jsonify({'error': f'Security: Dangerous character detected in URL'}), 400
+    # SECURITY: Block shell operators and dangerous characters in title only
+    DANGEROUS_CHARS_TITLE = ['&&', '||', ';', '|', '`', '$', '<', '>', '\n', '\r']
+    for dangerous_char in DANGEROUS_CHARS_TITLE:
         if dangerous_char in title:
             return jsonify({'error': f'Security: Dangerous character detected in title'}), 400
     
@@ -927,7 +1368,8 @@ def download():
     if advanced_options and isinstance(advanced_options, dict):
         custom_args = advanced_options.get('customArgs', '')
         if custom_args:
-            for dangerous_char in DANGEROUS_CHARS:
+            DANGEROUS_CHARS_ARGS = ['&&', '||', ';', '|', '`', '$', '\n', '\r']
+            for dangerous_char in DANGEROUS_CHARS_ARGS:
                 if dangerous_char in custom_args:
                     return jsonify({'error': f'Security: Dangerous character detected in custom arguments'}), 400
     
@@ -1081,63 +1523,7 @@ def preview_url():
         return jsonify({'error': 'Invalid URL format'}), 400
     
     try:
-        # Extract video ID for YouTube URLs
-        video_id = extract_video_id_from_url(url)
-        
-        if video_id:
-            # YouTube URL - use existing YouTube APIs (FAST - uses cached tokens)
-            try:
-                ytmusic, ytvideo, _ = get_apis()
-                
-                # Try YouTube Music API first
-                try:
-                    # Construct YouTube URL
-                    yt_url = f"https://www.youtube.com/watch?v={video_id}"
-                    
-                    # Search by URL to get metadata (uses cached tokens)
-                    # IMPORTANT: use_fresh_tokens=True means USE CACHE (backwards naming!)
-                    search_data = ytvideo.search_videos(video_id, use_fresh_tokens=True, retry_on_error=False)
-                    
-                    if search_data:
-                        videos = ytvideo.parse_video_results(search_data)
-                        if videos and len(videos) > 0:
-                            video = videos[0]
-                            
-                            # Return formatted preview data
-                            preview_data = {
-                                'title': video.get('title', 'Unknown Title'),
-                                'uploader': video.get('metadata', 'Unknown Channel'),
-                                'channel': video.get('metadata', 'Unknown Channel'),
-                                'thumbnail': video.get('thumbnail', f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"),
-                                'video_id': video_id,
-                                'webpage_url': yt_url,
-                                'source': 'YouTube'
-                            }
-                            
-                            return jsonify(preview_data)
-                except Exception as e:
-                    # YouTube API preview error - continue with fallback
-                    pass
-                
-                # Fallback: Return basic info with video ID
-                preview_data = {
-                    'title': 'YouTube Video',
-                    'uploader': 'Unknown Channel',
-                    'channel': 'Unknown Channel',
-                    'thumbnail': f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
-                    'video_id': video_id,
-                    'webpage_url': url,
-                    'source': 'YouTube'
-                }
-                
-                return jsonify(preview_data)
-                
-            except Exception as e:
-                # YouTube preview error - continue with basic info
-                pass
-        
-        # For non-YouTube URLs or if YouTube preview failed, return basic info
-        # Determine source
+        # First determine the source platform
         source = "Unknown"
         if 'soundcloud.com' in url.lower():
             source = "SoundCloud"
@@ -1145,22 +1531,238 @@ def preview_url():
             source = "JioSaavn"
         elif 'spotify.com' in url.lower():
             source = "Spotify"
+        elif 'youtube.com' in url.lower() or 'youtu.be' in url.lower() or 'music.youtube.com' in url.lower():
+            source = "YouTube"
         
-        # Return minimal preview data
-        preview_data = {
-            'title': f'{source} Content',
-            'uploader': source,
-            'channel': source,
-            'thumbnail': '',
-            'webpage_url': url,
-            'source': source
-        }
+        # Handle YouTube URLs with API
+        if source == "YouTube":
+            video_id = extract_video_id_from_url(url)
+            if video_id:
+                try:
+                    ytmusic, ytvideo, _ = get_apis()
+                    
+                    # Try YouTube Music API first
+                    try:
+                        # Construct YouTube URL
+                        yt_url = f"https://www.youtube.com/watch?v={video_id}"
+                        
+                        # Search by URL to get metadata (uses cached tokens)
+                        search_data = ytvideo.search_videos(video_id, use_fresh_tokens=True, retry_on_error=False)
+                        
+                        if search_data:
+                            videos = ytvideo.parse_video_results(search_data)
+                            if videos and len(videos) > 0:
+                                video = videos[0]
+                                
+                                # Return formatted preview data
+                                preview_data = {
+                                    'title': video.get('title', 'Unknown Title'),
+                                    'uploader': video.get('metadata', 'Unknown Channel'),
+                                    'channel': video.get('metadata', 'Unknown Channel'),
+                                    'thumbnail': video.get('thumbnail', f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"),
+                                    'video_id': video_id,
+                                    'webpage_url': yt_url,
+                                    'source': 'YouTube'
+                                }
+                                
+                                return jsonify(preview_data)
+                    except Exception as e:
+                        # YouTube API preview error - continue with fallback
+                        pass
+                    
+                    # Fallback: Return basic info with video ID if we can extract it
+                    if video_id:
+                        preview_data = {
+                            'title': 'YouTube Video',
+                            'uploader': 'Unknown Channel',
+                            'channel': 'Unknown Channel',
+                            'thumbnail': f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+                            'video_id': video_id,
+                            'webpage_url': url,
+                            'source': 'YouTube'
+                        }
+                        return jsonify(preview_data)
+                    else:
+                        # No video ID found - invalid YouTube URL
+                        return jsonify({'error': 'Invalid YouTube URL - Unable to extract video information'}), 400
+                    
+                except Exception as e:
+                    # YouTube preview error - invalid URL
+                    return jsonify({'error': 'Invalid YouTube URL - Unable to extract video information'}), 400
         
-        return jsonify(preview_data)
+        # For non-YouTube URLs (SoundCloud, JioSaavn, Spotify, etc.)
+        # Try to extract enhanced metadata for JioSaavn
+        if source == "JioSaavn":
+            enhanced_metadata = extract_jiosaavn_metadata(url)
+            if enhanced_metadata:
+                preview_data = {
+                    'title': enhanced_metadata.get('title', f'{source} Content'),
+                    'uploader': enhanced_metadata.get('artist', source),
+                    'channel': enhanced_metadata.get('artist', source),
+                    'thumbnail': enhanced_metadata.get('thumbnail', ''),
+                    'album': enhanced_metadata.get('album', ''),
+                    'pid': enhanced_metadata.get('pid', ''),  # Add PID for suggestions
+                    'language': enhanced_metadata.get('language', 'hindi'),  # Add language for suggestions
+                    'webpage_url': url,
+                    'source': source
+                }
+                return jsonify(preview_data)
+            else:
+                # No metadata found - invalid JioSaavn URL
+                return jsonify({'error': 'Invalid JioSaavn URL - Unable to extract song information'}), 400
+        
+        # Try to extract enhanced metadata for SoundCloud
+        elif source == "SoundCloud":
+            print(f"Processing SoundCloud URL: {url}")
+            enhanced_metadata = extract_soundcloud_metadata_with_recommendations(url)
+            print(f"SoundCloud metadata result: {enhanced_metadata is not None}")
+            if enhanced_metadata:
+                print(f"SoundCloud data keys: {enhanced_metadata.keys()}")
+                if enhanced_metadata.get('main_track'):
+                    print(f"Main track found: {enhanced_metadata['main_track'].get('title', 'No title')}")
+            
+            if enhanced_metadata and enhanced_metadata.get('main_track'):
+                main_track = enhanced_metadata['main_track']
+                preview_data = {
+                    'title': main_track.get('title', f'{source} Content'),
+                    'uploader': main_track.get('artist', source),
+                    'channel': main_track.get('artist', source),
+                    'thumbnail': main_track.get('thumbnail', ''),
+                    'duration': main_track.get('duration', ''),
+                    'plays': main_track.get('plays', 0),
+                    'likes': main_track.get('likes', 0),
+                    'genre': main_track.get('genre', ''),
+                    'webpage_url': url,
+                    'source': source,
+                    'soundcloud_data': enhanced_metadata  # Include full data for frontend
+                }
+                print(f"Returning enhanced SoundCloud preview: {preview_data['title']}")
+                return jsonify(preview_data)
+            else:
+                print(f"No SoundCloud metadata found - invalid URL")
+                # No metadata found - invalid SoundCloud URL
+                return jsonify({'error': 'Invalid SoundCloud URL - Unable to extract track information'}), 400
+        
+        # For other sources that don't have metadata extraction yet
+        # Return generic error for unsupported platforms
+        return jsonify({'error': f'Invalid {source} URL - Unable to extract content information'}), 400
         
     except Exception as e:
         print(f"❌ Preview error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/jiosaavn_suggestions/<pid>')
+def get_jiosaavn_suggestions_by_pid(pid):
+    """Get JioSaavn recommendations using PID"""
+    try:
+        # Validate PID (alphanumeric, reasonable length)
+        if not pid or not re.match(r'^[a-zA-Z0-9_-]{1,20}$', pid):
+            return jsonify({'error': 'Invalid PID format'}), 400
+        
+        # Default to English if no language specified
+        language = request.args.get('language', 'english')
+        
+        # Validate language (allow only safe values)
+        allowed_languages = ['english', 'hindi', 'telugu', 'tamil', 'punjabi', 'bengali', 'marathi', 'gujarati', 'kannada', 'malayalam']
+        if language not in allowed_languages:
+            language = 'english'
+        
+        # Build JioSaavn API URL
+        api_url = f"https://www.jiosaavn.com/api.php?__call=reco.getreco&api_version=4&_format=json&_marker=0&ctx=wap6dot0&pid={pid}&language={language}"
+        
+        # Make request to JioSaavn API
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Referer": "https://www.jiosaavn.com/"
+        }
+        
+        response = requests.get(api_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                
+                # Parse and format the response
+                suggestions = []
+                
+                # Check if data is a direct list (which it is based on our test)
+                if isinstance(data, list):
+                    items_to_process = data
+                # Fallback: check for results key (in case API structure varies)
+                elif 'results' in data and isinstance(data['results'], list):
+                    items_to_process = data['results']
+                else:
+                    items_to_process = []
+                
+                for item in items_to_process:
+                    if isinstance(item, dict):
+                        # Extract artist from subtitle (format: "Artist - Album")
+                        subtitle = item.get('subtitle', '')
+                        artist = subtitle.split(' - ')[0] if ' - ' in subtitle else 'Unknown Artist'
+                        
+                        suggestion = {
+                            'id': item.get('id', ''),
+                            'title': item.get('title', ''),
+                            'artist': artist,
+                            'subtitle': subtitle,
+                            'thumbnail': item.get('image', ''),
+                            'url': item.get('perma_url', ''),
+                            'duration': str(item.get('duration', 0)) if item.get('duration') else '0:00',
+                            'language': item.get('language', ''),
+                            'type': item.get('type', 'song'),
+                            'year': item.get('year', ''),
+                            'play_count': item.get('play_count', 0)
+                        }
+                        suggestions.append(suggestion)
+                
+                return jsonify({
+                    'success': True,
+                    'pid': pid,
+                    'language': language,
+                    'suggestions': suggestions,
+                    'count': len(suggestions)
+                })
+                
+            except json.JSONDecodeError:
+                return jsonify({'error': 'Invalid JSON response from JioSaavn API'}), 500
+        else:
+            return jsonify({'error': f'JioSaavn API returned status {response.status_code}'}), 500
+            
+    except requests.RequestException as e:
+        return jsonify({'error': f'Request failed: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/extract_jiosaavn_pid', methods=['POST'])
+def extract_jiosaavn_pid():
+    """Extract PID from JioSaavn URL"""
+    try:
+        data = request.get_json()
+        url = data.get('url', '').strip()
+        
+        if not url:
+            return jsonify({'error': 'URL is required'}), 400
+        
+        # Validate that it's a JioSaavn URL
+        if 'jiosaavn.com' not in url and 'saavn.com' not in url:
+            return jsonify({'error': 'Not a valid JioSaavn URL'}), 400
+        
+        # Extract PID using the existing function
+        metadata = extract_jiosaavn_metadata(url)
+        
+        if metadata and 'pid' in metadata:
+            return jsonify({
+                'success': True,
+                'pid': metadata['pid'],
+                'metadata': metadata
+            })
+        else:
+            return jsonify({'error': 'Could not extract PID from URL'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 @app.route('/proxy_image')
@@ -1184,11 +1786,11 @@ if __name__ == '__main__':
     print("🎵 Universal Music Downloader")
     print(f"📁 Downloads: {app.config['DOWNLOAD_FOLDER']}")
     print(f"� Download status file: {DOWNLOAD_STATUS_FILE}")
-    print(f"�🕐 Cache duration: 2 hours")
+    print(f"�🕐 Cache duration: 24 hours")
     print(f"🌐 Browser mode: Headless (background)")
     print("="*70)
     
     load_persistent_data()
     cleanup_old_downloads()
-    
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+
+    app.run(debug=True, port=os.getenv('PORT'), threaded=True)
