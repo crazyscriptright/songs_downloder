@@ -91,15 +91,68 @@ class YouTubeMusicVideoAPI:
                 self.cached_tokens = cached_tokens
                 return cached_tokens
         
-        # If no valid cache or force refresh, extract fresh tokens
+        # If no valid cache or force refresh, try fast HTTP method first
         print("🔄 Fetching fresh tokens...")
-        fresh_tokens = self.extract_tokens_from_page(search_query)
+        fresh_tokens = self.get_tokens_fast()
+        
+        # If fast method fails, fallback to Selenium
+        if not fresh_tokens or not fresh_tokens.get('api_key'):
+            print("⚠️ Fast method failed, falling back to Selenium...")
+            fresh_tokens = self.extract_tokens_from_page(search_query)
         
         # Save to cache
         self.save_cache(fresh_tokens)
         self.cached_tokens = fresh_tokens
         
         return fresh_tokens
+    
+    def get_tokens_fast(self):
+        """Get YT Music tokens without Selenium - 10x faster"""
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        }
+        
+        try:
+            print("🚀 Trying fast HTTP method...")
+            
+            # Direct request to YT Music
+            response = requests.get('https://music.youtube.com/', headers=headers, timeout=10)
+            html = response.text
+            
+            # Extract tokens with regex (much faster than Selenium)
+            api_key = re.search(r'"INNERTUBE_API_KEY":"([^"]+)"', html)
+            visitor_data = re.search(r'"VISITOR_DATA":"([^"]+)"', html)
+            client_version = re.search(r'"INNERTUBE_CLIENT_VERSION":"([^"]+)"', html)
+            
+            # Alternative patterns if first ones don't work
+            if not api_key:
+                api_key = re.search(r'innertubeApiKey":"([^"]+)"', html)
+            if not visitor_data:
+                visitor_data = re.search(r'visitorData":"([^"]+)"', html)
+            if not client_version:
+                client_version = re.search(r'clientVersion":"([^"]+)"', html)
+            
+            if api_key and visitor_data and client_version:
+                tokens = {
+                    'api_key': api_key.group(1),
+                    'visitor_data': visitor_data.group(1),
+                    'client_version': client_version.group(1)
+                }
+                
+                print(f"✅ Fast extraction successful!")
+                print(f"✓ API Key: {tokens['api_key']}")
+                print(f"✓ Visitor Data: {tokens['visitor_data']}")
+                print(f"✓ Client Version: {tokens['client_version']}")
+                
+                return tokens
+            else:
+                print(f"⚠️ Fast extraction incomplete - API Key: {bool(api_key)}, Visitor: {bool(visitor_data)}, Version: {bool(client_version)}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Fast token extraction failed: {e}")
+            return None
         
     def extract_tokens_from_page(self, search_query=""):
         """Extract fresh tokens from YouTube Music page"""
