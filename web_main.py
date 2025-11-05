@@ -1212,6 +1212,122 @@ def search():
     })
 
 
+@app.route('/search/jiosaavn', methods=['POST'])
+def search_jiosaavn_endpoint():
+    """Fast JioSaavn search endpoint"""
+    data = request.get_json()
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    try:
+        results = search_jiosaavn(query)
+        return jsonify({
+            'status': 'complete',
+            'source': 'jiosaavn',
+            'results': results,
+            'count': len(results),
+            'query': query
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'source': 'jiosaavn',
+            'error': str(e),
+            'results': [],
+            'count': 0,
+            'query': query
+        })
+
+
+@app.route('/search/soundcloud', methods=['POST'])
+def search_soundcloud_endpoint():
+    """Fast SoundCloud search endpoint"""
+    data = request.get_json()
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    try:
+        results = search_soundcloud(query)
+        return jsonify({
+            'status': 'complete',
+            'source': 'soundcloud',
+            'results': results,
+            'count': len(results),
+            'query': query
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'source': 'soundcloud',
+            'error': str(e),
+            'results': [],
+            'count': 0,
+            'query': query
+        })
+
+
+@app.route('/search/ytmusic', methods=['POST'])
+def search_ytmusic_endpoint():
+    """Fast YouTube Music search endpoint"""
+    data = request.get_json()
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    try:
+        results = search_ytmusic(query)
+        return jsonify({
+            'status': 'complete',
+            'source': 'ytmusic',
+            'results': results,
+            'count': len(results),
+            'query': query
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'source': 'ytmusic',
+            'error': str(e),
+            'results': [],
+            'count': 0,
+            'query': query
+        })
+
+
+@app.route('/search/ytvideo', methods=['POST'])
+def search_ytvideo_endpoint():
+    """Fast YouTube Video search endpoint"""
+    data = request.get_json()
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    try:
+        results = search_ytvideo(query)
+        return jsonify({
+            'status': 'complete',
+            'source': 'ytvideo',
+            'results': results,
+            'count': len(results),
+            'query': query
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'source': 'ytvideo',
+            'error': str(e),
+            'results': [],
+            'count': 0,
+            'query': query
+        })
+
+
 def get_youtube_suggestions(query):
     """Get search suggestions from YouTube API"""
     try:
@@ -1793,4 +1909,4 @@ if __name__ == '__main__':
     load_persistent_data()
     cleanup_old_downloads()
 
-    app.run(debug=False, port=os.getenv('PORT'), threaded=True)
+    app.run(debug=True, port=os.getenv('PORT'), threaded=True)

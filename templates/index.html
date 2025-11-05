@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Universal Music Downloader</title>
+    <link rel="icon" type="image/png" href="static/fevicon2.png">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2068,36 +2069,142 @@
 
             // Show searching status with improved styling
             if (isMusicUrl) {
-                showStatus('searching', 'Validating URL...', 'Checking music platform compatibility');
+                showStatus('searching', 'Processing URL...', 'Extracting music information');
+                
+                // Set up 10-second timeout for URL processing
+                const urlTimeoutId = setTimeout(() => {
+                    showStatus('info', 'Still processing...', 'URL analysis is taking longer than expected. Please wait...');
+                }, 10000);
+                
+                // For URLs, use the original single endpoint approach
+                try {
+                    const response = await fetch('/search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            query: query,
+                            type: searchType
+                        })
+                    });
+
+                    const data = await response.json();
+                    currentSearchId = data.search_id;
+                    
+                    // Clear the timeout since we got a response
+                    clearTimeout(urlTimeoutId);
+
+                    // Poll for results
+                    pollSearchResults();
+                } catch (error) {
+                    clearTimeout(urlTimeoutId);
+                    showStatus('error', 'URL processing failed!', 'Please check the URL and try again');
+                    searchBtn.disabled = false;
+                }
             } else {
-                showStatus('searching', 'Searching all sources...', 'Finding the best matches for your query');
-            }
+                // For search queries, use parallel endpoint approach for faster results
+                showStatus('searching', 'Searching all platforms...', 'JioSaavn • SoundCloud • YouTube Music');
+                
+                // Set up 10-second timeout for search queries
+                const searchTimeoutId = setTimeout(() => {
+                    showStatus('info', 'First search results may be delayed...', 'API caching in progress. Subsequent searches will be faster!');
+                }, 10000);
+                
+                // Disable search button
+                searchBtn.disabled = true;
 
-            // Disable search button
-            searchBtn.disabled = true;
+                // Initialize results container
+                const allResults = {
+                    jiosaavn: [],
+                    soundcloud: [],
+                    ytmusic: [],
+                    ytvideo: []
+                };
+                
+                // Track completed requests
+                let completedSources = 0;
+                const totalSources = searchType === 'music' ? 3 : (searchType === 'video' ? 1 : 4);
+                
+                // Define which endpoints to call based on search type
+                const endpoints = [];
+                if (searchType === 'music' || searchType === 'all') {
+                    endpoints.push('jiosaavn', 'soundcloud', 'ytmusic');
+                }
+                if (searchType === 'video' || searchType === 'all') {
+                    endpoints.push('ytvideo');
+                }
 
-            try {
-                // Start search
-                const response = await fetch('/search', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        query: query,
-                        type: searchType
-                    })
+                // Function to handle results from each source
+                const handleSourceResult = (source, data) => {
+                    allResults[source] = data.results || [];
+                    completedSources++;
+                    
+                    // Clear the timeout once we start getting results
+                    if (completedSources === 1) {
+                        clearTimeout(searchTimeoutId);
+                    }
+                    
+                    // Update status to show progress
+                    const completedNames = [];
+                    if (allResults.jiosaavn.length > 0) completedNames.push(`JioSaavn (${allResults.jiosaavn.length})`);
+                    if (allResults.soundcloud.length > 0) completedNames.push(`SoundCloud (${allResults.soundcloud.length})`);
+                    if (allResults.ytmusic.length > 0) completedNames.push(`YTMusic (${allResults.ytmusic.length})`);
+                    if (allResults.ytvideo.length > 0) completedNames.push(`YTVideo (${allResults.ytvideo.length})`);
+                    
+                    if (completedNames.length > 0) {
+                        showStatus('searching', `Found results: ${completedNames.join(' • ')}`, `${completedSources}/${totalSources} sources completed`);
+                        
+                        // Display results immediately as they arrive
+                        displayResults({
+                            jiosaavn: allResults.jiosaavn,
+                            soundcloud: allResults.soundcloud,
+                            ytmusic: allResults.ytmusic,
+                            ytvideo: allResults.ytvideo
+                        });
+                    }
+                    
+                    // Check if all sources completed
+                    if (completedSources >= totalSources) {
+                        clearTimeout(searchTimeoutId);
+                        const totalResults = allResults.jiosaavn.length + allResults.soundcloud.length + 
+                                           allResults.ytmusic.length + allResults.ytvideo.length;
+                        
+                        if (totalResults > 0) {
+                            showStatus('complete', `Search completed!`, `Found ${totalResults} results across all platforms`);
+                        } else {
+                            showStatus('warning', 'No results found', 'Try different keywords or check spelling');
+                        }
+                        searchBtn.disabled = false;
+                    }
+                };
+
+                // Make parallel requests to all endpoints
+                const promises = endpoints.map(async (source) => {
+                    try {
+                        const response = await fetch(`/search/${source}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ 
+                                query: query,
+                                type: searchType
+                            })
+                        });
+
+                        const data = await response.json();
+                        handleSourceResult(source, data);
+                    } catch (error) {
+                        console.error(`${source} search failed:`, error);
+                        handleSourceResult(source, { results: [] });
+                    }
                 });
 
-                const data = await response.json();
-                currentSearchId = data.search_id;
-
-                // Poll for results
-                pollSearchResults();
-
-            } catch (error) {
-                showStatus('error', 'Search failed!', 'Please check your connection and try again');
-                searchBtn.disabled = false;
+                // Don't wait for all - results will be displayed as they arrive
+                Promise.allSettled(promises).finally(() => {
+                    clearTimeout(searchTimeoutId);
+                });
             }
         }
 
@@ -2924,16 +3031,9 @@
             const searchInput = document.getElementById('searchInput');
             searchInput.value = url;
             
-            // Don't change searchType - preserve the current user selection
-            // The searchType should remain as currently selected (music/video/all)
-            
-            // Update button states to reflect current searchType
-            document.querySelectorAll('.type-btn').forEach(btn => {
-                btn.classList.remove('active');
-                if (btn.getAttribute('data-type') === searchType) {
-                    btn.classList.add('active');
-                }
-            });
+            // Preserve the current search type by explicitly calling selectSearchType
+            // This ensures the search type remains as "video" if user was searching videos
+            selectSearchType(searchType);
             
             // Perform the search which will show advanced options
             performSearch();
@@ -3171,10 +3271,10 @@
                     }
                     
                     // Keep polling with incremented attempt count
-                    setTimeout(() => pollDownloadStatus(downloadId, button, title, attemptCount + 1), 500);
+                    setTimeout(() => pollDownloadStatus(downloadId, button, title, attemptCount + 1), 2000);
                 } else {
                     // Keep polling for other statuses (preparing, queued, etc.) with incremented attempt count
-                    setTimeout(() => pollDownloadStatus(downloadId, button, title, attemptCount + 1), 1000);
+                    setTimeout(() => pollDownloadStatus(downloadId, button, title, attemptCount + 1), 2000);
                 }
             } catch (error) {
                 // Check if it's a network error or timeout
