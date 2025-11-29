@@ -23,5 +23,3 @@ window.API = {
   baseUrl: API_BASE_URL,
   call: apiCall,
 };
-
-console.log("🌐 API Base URL:", API_BASE_URL);

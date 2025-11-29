@@ -1886,7 +1886,6 @@
           const data = await response.json();
           showSuggestions(data.suggestions || []);
         } catch (error) {
-          console.log("Failed to fetch suggestions:", error);
           hideSuggestions();
         }
       }
@@ -2068,7 +2067,6 @@
           // Initialize lazy loading for the new images
           initLazyLoading();
         } catch (error) {
-          console.error("Failed to load JioSaavn suggestions:", error);
           suggestionContainer.innerHTML = `
                     <h3 style="font-size: 1.4em; color: var(--error-color); margin-bottom: 15px;">Recommended Tracks</h3>
                     <p style="color: var(--text-secondary); font-style: italic;">Failed to load recommendations. ${error.message}</p>
@@ -2521,7 +2519,6 @@
               const data = await response.json();
               handleSourceResult(source, data);
             } catch (error) {
-              console.error(`${source} search failed:`, error);
               handleSourceResult(source, { results: [] });
             }
           });
@@ -4010,7 +4007,6 @@
         };
 
         imageLoader.onerror = () => {
-          console.warn("Image failed to load:", src);
           // Handle image load error - use professional music placeholder
           const musicPlaceholder =
             "data:image/svg+xml;base64," +
@@ -4085,17 +4081,8 @@
 
             // Emergency fallback if apiBase is somehow empty
             if (!apiBase || apiBase === "") {
-              console.error(
-                "CRITICAL: apiBase was empty in createLazyImage! Using hardcoded fallback."
-              );
               apiBase = "https://song-download-9889cf8e8f85.herokuapp.com";
             }
-
-            console.log("Image proxy debug:", {
-              hostname,
-              apiBase,
-              originalSrc: actualSrc.substring(0, 100),
-            });
 
             actualSrc = `${apiBase}/proxy_image?url=${encodeURIComponent(
               actualSrc
