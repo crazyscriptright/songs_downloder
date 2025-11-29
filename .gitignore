@@ -1,6 +1,6 @@
 __pycache__/
-*.json
 schedulestart.bat
+backend/*.json
 .env
 .vscode/
 .DS_Store
