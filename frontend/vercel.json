@@ -1,17 +1,4 @@
 {
-  "builds": [
-    {
-      "src": "build.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
-  "env": {
-    "API_URL": "@api-url"
-  }
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }

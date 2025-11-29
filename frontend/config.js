@@ -1,9 +1,10 @@
 // API Configuration
-// Automatically detects API URL from environment or uses default
+// Uses Vite environment variable or defaults
 const API_BASE_URL =
-  window.location.hostname === "localhost"
-    ? "http://localhost:5000" // Local development
-    : window.ENV?.API_URL || "https://song-download-9889cf8e8f85.herokuapp.com"; // Production
+  import.meta.env.VITE_API_URL ||
+  (window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://song-download-9889cf8e8f85.herokuapp.com");
 
 // Helper function to make API calls
 async function apiCall(endpoint, options = {}) {
