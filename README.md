@@ -1,5 +1,7 @@
 # Universal Music Downloader
 
+![Homepage Preview](.github/homepage.png)
+
 A powerful web-based music downloader that searches and downloads music from multiple sources including YouTube Music, JioSaavn, and SoundCloud.
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)

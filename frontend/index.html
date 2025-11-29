@@ -2958,7 +2958,7 @@
         } else if (previewData && !previewData.error && previewData.thumbnail) {
           // Full preview with thumbnail (non-YouTube or fallback)
           const thumbnail = previewData.thumbnail
-            ? `/proxy_image?url=${encodeURIComponent(previewData.thumbnail)}`
+            ? previewData.thumbnail
             : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23333"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23666">No Thumbnail</text></svg>';
 
           previewHTML = `
@@ -3509,9 +3509,9 @@
         card.className = "song-card";
         card.dataset.songId = `${sourceId}-${index}`;
 
-        // Use proxy for images to avoid CORS
+        // Use proxy for images to avoid CORS - handled by createLazyImage now
         const thumbnailUrl = song.thumbnail
-          ? `/proxy_image?url=${encodeURIComponent(song.thumbnail)}`
+          ? song.thumbnail
           : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23333"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23666">No Image</text></svg>';
 
         // Build metadata string based on source
