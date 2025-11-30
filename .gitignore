@@ -22,3 +22,4 @@ frontend/dist/
 frontend/.DS_Store
 backend/.DS_Store
 backend/__pycache__/
+backend/cookies.txt
