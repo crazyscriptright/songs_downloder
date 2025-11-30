@@ -3616,6 +3616,17 @@
         useAdvanced = false,
         button = null
       ) {
+        // Check if this is a YouTube URL for logging
+        const isYouTube =
+          url.includes("youtube.com") || url.includes("youtu.be");
+
+        if (isYouTube) {
+          console.log("🎬 [FRONTEND-YT] Starting YouTube download");
+          console.log("🔗 [FRONTEND-YT] URL:", url);
+          console.log("📝 [FRONTEND-YT] Title:", title);
+          console.log("⚙️ [FRONTEND-YT] Use Advanced:", useAdvanced);
+        }
+
         // Find button if not provided
         if (!button) {
           // Try to find the button for this song (for resumed downloads)
@@ -3726,7 +3737,17 @@
             }
           }
 
-          const response = await fetch(`${getApiBaseUrl()}/download`, {
+          const apiUrl = `${getApiBaseUrl()}/download`;
+
+          if (isYouTube) {
+            console.log("📡 [FRONTEND-YT] Sending request to:", apiUrl);
+            console.log(
+              "📦 [FRONTEND-YT] Request body:",
+              JSON.stringify(requestBody, null, 2)
+            );
+          }
+
+          const response = await fetch(apiUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -3734,21 +3755,53 @@
             body: JSON.stringify(requestBody),
           });
 
+          if (isYouTube) {
+            console.log(
+              "📨 [FRONTEND-YT] Response status:",
+              response.status,
+              response.statusText
+            );
+          }
+
           const data = await response.json();
+
+          if (isYouTube) {
+            console.log("📥 [FRONTEND-YT] Response data:", data);
+          }
 
           // Check for API errors
           if (!response.ok || data.error) {
+            if (isYouTube) {
+              console.error(
+                "❌ [FRONTEND-YT] Error response:",
+                data.error || "Download request failed"
+              );
+            }
             throw new Error(data.error || "Download request failed");
           }
 
           const downloadId = data.download_id;
+
+          if (isYouTube) {
+            console.log("🆔 [FRONTEND-YT] Download ID:", downloadId);
+            console.log("🔄 [FRONTEND-YT] Starting status polling...");
+          }
 
           // Poll download status with timeout tracking
           if (button) {
             pollDownloadStatus(downloadId, button, title, 0); // Start with attempt 0
           }
         } catch (error) {
-          console.error("Download start error:", error);
+          const isYouTube =
+            url.includes("youtube.com") || url.includes("youtu.be");
+
+          if (isYouTube) {
+            console.error("❌ [FRONTEND-YT] Download start error:", error);
+            console.error("❌ [FRONTEND-YT] Error stack:", error.stack);
+          } else {
+            console.error("Download start error:", error);
+          }
+
           if (button) {
             button.className = "download-btn";
             button.innerHTML = "❌ Failed";
@@ -3798,8 +3851,17 @@
 
           const data = await response.json();
 
+          // Check if this is a YouTube download
+          const isYouTube =
+            allDownloads[downloadId]?.url?.includes("youtube.com") ||
+            allDownloads[downloadId]?.url?.includes("youtu.be");
+
           // Debug logging
-          console.log(`Download Status [${downloadId}]:`, data);
+          if (isYouTube) {
+            console.log(`📊 [FRONTEND-YT] Status [${downloadId}]:`, data);
+          } else {
+            console.log(`Download Status [${downloadId}]:`, data);
+          }
 
           // Update local download data
           allDownloads[downloadId] = data;

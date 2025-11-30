@@ -792,6 +792,12 @@ def download_song(url, title, download_id, advanced_options=None):
     """Download song/video using yt-dlp with optional advanced parameters and progress tracking"""
     global download_status, active_processes
     
+    # Check if this is a YouTube download for logging
+    is_youtube = 'youtube.com' in url or 'youtu.be' in url
+    
+    if is_youtube:
+        print(f"⚙️ [YT-DOWNLOAD] Thread started for {download_id}")
+    
     # Clean up /tmp if getting full (Heroku)
     cleanup_tmp_directory()
     
@@ -1020,6 +1026,31 @@ def download_song(url, title, download_id, advanced_options=None):
         download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
         os.makedirs(download_dir, exist_ok=True)
 
+        # Add cookies for YouTube authentication (avoid bot detection)
+        # Check multiple possible locations for cookies.txt
+        possible_cookie_paths = [
+            os.path.join(os.path.dirname(__file__), 'cookies.txt'),  # Same dir as web_main.py
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt'),  # Parent dir
+            os.path.join(os.getcwd(), 'cookies.txt'),  # Current working directory
+            os.path.join(os.getcwd(), 'backend', 'cookies.txt'),  # backend subdir
+        ]
+        
+        cookies_file = None
+        for path in possible_cookie_paths:
+            if os.path.exists(path):
+                cookies_file = path
+                if is_youtube:
+                    print(f"🍪 [YT-DOWNLOAD] Found cookies.txt at: {path}")
+                break
+        
+        if cookies_file:
+            cmd.extend(['--cookies', cookies_file])
+            if is_youtube:
+                print(f"✅ [YT-DOWNLOAD] Added cookies to yt-dlp command")
+        else:
+            if is_youtube:
+                print(f"⚠️ [YT-DOWNLOAD] WARNING: cookies.txt not found - YouTube may block download")
+
         # Common options with newline progress for parsing
         cmd.extend([
             '-P', download_dir,
@@ -1028,6 +1059,11 @@ def download_song(url, title, download_id, advanced_options=None):
             url
         ])
         
+        # Log the full command for YouTube downloads only
+        if 'youtube.com' in url or 'youtu.be' in url:
+            print(f"🎵 [YT-DOWNLOAD] Download ID: {download_id}")
+            print(f"🔗 [YT-DOWNLOAD] URL: {url}")
+            print(f"💻 [YT-DOWNLOAD] Command: {' '.join(cmd)}")
         
         creation_flags = 0
         if os.name == 'nt':  # Windows
@@ -1058,20 +1094,21 @@ def download_song(url, title, download_id, advanced_options=None):
         has_progress = False
         
         # Parse progress in real-time
+        is_youtube = 'youtube.com' in url or 'youtu.be' in url
         for line in process.stdout:
             # Check if download was cancelled
             if download_status.get(download_id, {}).get('status') == 'cancelled':
-                print(f"🚫 Download {download_id} was cancelled")
                 process.terminate()
                 break
                 
             line = line.strip()
-            # Skip printing every line for cleaner output
             
             # Detect ERROR messages from yt-dlp
             if 'ERROR:' in line:
                 error_msg = line.replace('ERROR:', '').strip()
                 error_messages.append(error_msg)
+                if is_youtube:
+                    print(f"❌ [YT-DOWNLOAD] ERROR: {error_msg}")
             
             # Detect common error patterns
             error_patterns = [
@@ -1092,6 +1129,8 @@ def download_song(url, title, download_id, advanced_options=None):
             
             if any(pattern.lower() in line.lower() for pattern in error_patterns):
                 error_messages.append(line)
+                if is_youtube:
+                    print(f"⚠️ [YT-DOWNLOAD] {line}")
             
             # Parse download progress: [download]  45.2% of 3.50MiB at 1.23MiB/s ETA 00:02
             if '[download]' in line and '%' in line:
@@ -1139,6 +1178,8 @@ def download_song(url, title, download_id, advanced_options=None):
         if error_messages:
             # Combine error messages
             error_text = ' | '.join(error_messages[:3])  # Limit to first 3 errors
+            if is_youtube:
+                print(f"❌ [YT-DOWNLOAD] Failed: {error_text}")
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
@@ -1247,6 +1288,8 @@ def download_song(url, title, download_id, advanced_options=None):
             error_text = 'Download failed'
             if error_messages:
                 error_text = ' | '.join(error_messages[:3])  # Use collected error messages
+            if is_youtube:
+                print(f"❌ [YT-DOWNLOAD] Exit code {process.returncode}: {error_text}")
             
             download_status[download_id] = {
                 'status': 'error',
@@ -1262,6 +1305,11 @@ def download_song(url, title, download_id, advanced_options=None):
             }
     
     except Exception as e:
+        is_youtube = 'youtube.com' in url or 'youtu.be' in url
+        if is_youtube:
+            print(f"❌ [YT-DOWNLOAD] Exception: {e}")
+            import traceback
+            traceback.print_exc()
         download_status[download_id] = {
             'status': 'error',
             'progress': 0,
@@ -1607,6 +1655,14 @@ def download():
     
     # Generate download ID
     download_id = f"download_{datetime.now().timestamp()}"
+    
+    # Log YouTube download initiation
+    is_youtube = 'youtube.com' in url or 'youtu.be' in url
+    if is_youtube:
+        print(f"🎬 [YT-DOWNLOAD] Starting YouTube download")
+        print(f"📋 [YT-DOWNLOAD] Download ID: {download_id}")
+        print(f"🔗 [YT-DOWNLOAD] URL: {url}")
+        print(f"📝 [YT-DOWNLOAD] Title: {title}")
     
     thread = threading.Thread(
         target=download_song,
