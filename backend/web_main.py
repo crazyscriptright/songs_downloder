@@ -89,6 +89,14 @@ def cleanup_tmp_directory():
                 except Exception as e:
                     pass
             
+            # Clean up empty directories
+            for root, dirs, files in os.walk(tmp_dir, topdown=False):
+                for name in dirs:
+                    try:
+                        os.rmdir(os.path.join(root, name))
+                    except OSError:
+                        pass # Directory not empty
+
             print(f"✅ Cleaned up {deleted_count} old files from /tmp")
             
             # Check new usage
@@ -243,7 +251,6 @@ def search_ytvideo(query):
 
 def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
     """Extract metadata from SoundCloud URL including main track and recommendations"""
-    print(f"🎯 Starting SoundCloud extraction for: {soundcloud_url}")
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         
@@ -251,15 +258,11 @@ def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
         if soundcloud_url.startswith("https://soundcloud.com/"):
             mobile_url = soundcloud_url.replace("https://soundcloud.com/", "https://m.soundcloud.com/")
             url = mobile_url
-            print(f"📱 Converted to mobile URL: {url}")
         else:
             url = soundcloud_url
         
-        print(f"🌐 Making request to: {url}")
         response = requests.get(url, headers=headers, timeout=10)
-        print(f"📡 Response status: {response.status_code}")
         if response.status_code != 200:
-            print(f"❌ Bad response status: {response.status_code}")
             return None
         
         soup = BeautifulSoup(response.text, "html.parser")
@@ -301,13 +304,11 @@ def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
             if entities and "tracks" in entities:
                 tracks_data = entities.get("tracks", {})
                 users_data = entities.get("users", {})  # Get users data too
-                print("Found tracks using mobile/new structure")
             
             # Method 2: Direct tracks access
             elif "tracks" in data:
                 tracks_data = data.get("tracks", {})
                 users_data = data.get("users", {})  # Try to get users too
-                print("Found tracks using direct access")
             
             # Method 3: Recursive search
             else:
@@ -339,13 +340,11 @@ def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
                 if key.startswith("soundcloud:tracks"):
                     track_data = value.get("data", {})
                     
-                    # Debug track data structure
-                    print(f"🔍 Processing track: {key}")
-                    print(f"📊 Track data keys: {list(track_data.keys())}")
-                    
-                    # Format duration
+                    # Get duration
                     duration_ms = track_data.get('duration', 0)
                     duration_str = "0:00"
+                    
+                    # Format duration
                     if duration_ms:
                         minutes = duration_ms // 60000
                         seconds = (duration_ms % 60000) // 1000
@@ -353,31 +352,27 @@ def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
                     
                     # Format counts
                     plays = track_data.get('playback_count', 0)
-                    likes = track_data.get('likes_count', 0)                    # Extract artist name - try multiple fields
+                    likes = track_data.get('likes_count', 0)
+                    
+                    # Extract artist name
                     artist_name = "Unknown Artist"
                     
                     # First try direct user field
                     if 'user' in track_data and isinstance(track_data['user'], dict):
                         artist_name = track_data['user'].get('username', 'Unknown Artist')
-                        print(f"👤 Found user.username: {artist_name}")
                     elif 'uploader' in track_data:
                         artist_name = track_data['uploader']
-                        print(f"👤 Found uploader: {artist_name}")
                     elif 'artist' in track_data:
                         artist_name = track_data['artist']
-                        print(f"👤 Found artist: {artist_name}")
                     else:
                         # Try to find user via user_id lookup in users_data
                         user_id = track_data.get('user_id')
                         if user_id and users_data:
-                            print(f"💳 Found user_id: {user_id}, looking up in users data...")
-                            
                             # Look for user in users_data by user_id
                             user_key = f"soundcloud:users:{user_id}"
                             if user_key in users_data:
                                 user_info = users_data[user_key].get('data', {})
                                 artist_name = user_info.get('username', user_info.get('display_name', 'Unknown Artist'))
-                                print(f"✅ Found artist via user lookup: {artist_name}")
                             else:
                                 # Try direct user_id lookup
                                 for key, user_data in users_data.items():
@@ -385,23 +380,10 @@ def extract_soundcloud_metadata_with_recommendations(soundcloud_url):
                                         user_info = user_data.get('data', {})
                                         if user_info.get('id') == user_id:
                                             artist_name = user_info.get('username', user_info.get('display_name', 'Unknown Artist'))
-                                            print(f"✅ Found artist via ID match: {artist_name}")
                                             break
-                                
-                                if artist_name == "Unknown Artist":
-                                    print(f"❌ Could not find user {user_id} in users data")
-                                    print(f"🔍 Available user keys: {list(users_data.keys())[:5] if users_data else 'None'}")
-                        elif user_id:
-                            print(f"💳 Found user_id: {user_id} but no users_data available")
-                        else:
-                            print("❌ No user_id found in track data")
-                    
-                    print(f"🎤 Final Artist: {artist_name}")
-                    print(f"🎵 Title: {track_data.get('title', 'Unknown')}")
                     
                     soundcloud_tracks.append({
-                        'id': key,
-                        'title': track_data.get('title', 'Unknown'),
+                        'title': track_data.get('title', 'Unknown Title'),
                         'artist': artist_name,
                         'url': track_data.get('permalink_url', soundcloud_url),
                         'thumbnail': track_data.get('artwork_url', ''),
@@ -1010,7 +992,7 @@ def download_song(url, title, download_id, advanced_options=None):
                         parsed_args = shlex.split(custom_args)
                         for arg in parsed_args:
                             # Additional security: check each arg for dangerous chars
-                            has_danger = any(dc in arg for dc in DANGEROUS_CHARS)
+                            has_danger = any(dc in arg for dc in DANGEROUS_CHARS_ARGS)
                             if has_danger:
                                 # Security: Block dangerous argument
                                 continue
@@ -1034,9 +1016,13 @@ def download_song(url, title, download_id, advanced_options=None):
             ])
             output_template = os.path.join(app.config['DOWNLOAD_FOLDER'], f"%(title)s.%(ext)s")
         
+        # Create a unique directory for this download to avoid filename collisions
+        download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+        os.makedirs(download_dir, exist_ok=True)
+
         # Common options with newline progress for parsing
         cmd.extend([
-            '-P', app.config['DOWNLOAD_FOLDER'],
+            '-P', download_dir,
             '-o', '%(title)s.%(ext)s',
             '--newline',  # Progress on new lines for easier parsing
             url
@@ -1169,16 +1155,19 @@ def download_song(url, title, download_id, advanced_options=None):
             return
         
         if process.returncode == 0 and has_progress:
-            # Find the downloaded file
-            download_folder = app.config['DOWNLOAD_FOLDER']
-            files = os.listdir(download_folder)
-            
-            # Get the most recently created file
-            latest_file = max(
-                [os.path.join(download_folder, f) for f in files],
-                key=os.path.getctime,
-                default=None
-            )
+            # Find the downloaded file in the unique directory
+            download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+            try:
+                files = os.listdir(download_dir)
+                
+                # Get the most recently created file
+                latest_file = max(
+                    [os.path.join(download_dir, f) for f in files],
+                    key=os.path.getctime,
+                    default=None
+                )
+            except FileNotFoundError:
+                latest_file = None
             
             if latest_file:
                 filename = os.path.basename(latest_file)
@@ -1209,13 +1198,13 @@ def download_song(url, title, download_id, advanced_options=None):
                 }
         elif process.returncode == 0 and not has_progress:
             # yt-dlp returned 0 but no download progress - check if file was actually created
-            download_folder = app.config['DOWNLOAD_FOLDER']
+            download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
             try:
-                files = os.listdir(download_folder)
+                files = os.listdir(download_dir)
                 if files:
                     # Get the most recently created file
                     latest_file = max(
-                        [os.path.join(download_folder, f) for f in files],
+                        [os.path.join(download_dir, f) for f in files],
                         key=os.path.getctime,
                         default=None
                     )
@@ -1638,7 +1627,7 @@ def download_status_check(download_id):
         status = download_status[download_id]
         # If download complete, add file download URL
         if status['status'] == 'complete' and 'file' in status:
-            status['download_url'] = f"/get_file/{status['file']}"
+            status['download_url'] = f"/get_file/{download_id}/{status['file']}"
         return jsonify(status)
     else:
         return jsonify({'status': 'not_found'}), 404
@@ -1672,7 +1661,7 @@ def get_all_downloads():
     # Add download URLs for completed files
     for download_id, status in filtered_downloads.items():
         if status['status'] == 'complete' and 'file' in status:
-            status['download_url'] = f"/get_file/{status['file']}"
+            status['download_url'] = f"/get_file/{download_id}/{status['file']}"
     
     return jsonify(filtered_downloads)
 
@@ -1735,11 +1724,15 @@ def clear_downloads():
     })
 
 
-@app.route('/get_file/<filename>')
-def get_file(filename):
+@app.route('/get_file/<download_id>/<filename>')
+def get_file(download_id, filename):
     """Serve downloaded file to browser"""
     try:
-        file_path = os.path.join(app.config['DOWNLOAD_FOLDER'], filename)
+        # Security check for download_id
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', download_id):
+             return jsonify({'error': 'Invalid download ID'}), 400
+
+        file_path = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id, filename)
         if os.path.exists(file_path):
             return send_file(
                 file_path,
@@ -1856,13 +1849,7 @@ def preview_url():
         
         # Try to extract enhanced metadata for SoundCloud
         elif source == "SoundCloud":
-            print(f"Processing SoundCloud URL: {url}")
             enhanced_metadata = extract_soundcloud_metadata_with_recommendations(url)
-            print(f"SoundCloud metadata result: {enhanced_metadata is not None}")
-            if enhanced_metadata:
-                print(f"SoundCloud data keys: {enhanced_metadata.keys()}")
-                if enhanced_metadata.get('main_track'):
-                    print(f"Main track found: {enhanced_metadata['main_track'].get('title', 'No title')}")
             
             if enhanced_metadata and enhanced_metadata.get('main_track'):
                 main_track = enhanced_metadata['main_track']
@@ -1879,10 +1866,8 @@ def preview_url():
                     'source': source,
                     'soundcloud_data': enhanced_metadata  # Include full data for frontend
                 }
-                print(f"Returning enhanced SoundCloud preview: {preview_data['title']}")
                 return jsonify(preview_data)
             else:
-                print(f"No SoundCloud metadata found - invalid URL")
                 # No metadata found - invalid SoundCloud URL
                 return jsonify({'error': 'Invalid SoundCloud URL - Unable to extract track information'}), 400
         

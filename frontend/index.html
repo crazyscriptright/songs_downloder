@@ -2353,14 +2353,14 @@
             "Extracting music information"
           );
 
-          // Set up 10-second timeout for URL processing
+          // Set up 20-second timeout for URL processing (increased for better handling)
           const urlTimeoutId = setTimeout(() => {
             showStatus(
               "info",
               "Still processing...",
               "URL analysis is taking longer than expected. Please wait..."
             );
-          }, 10000);
+          }, 20000);
 
           // For URLs, use the original single endpoint approach
           try {
@@ -2400,14 +2400,14 @@
             "JioSaavn • SoundCloud • YouTube Music"
           );
 
-          // Set up 10-second timeout for search queries
+          // Set up 20-second timeout for search queries (increased for better handling)
           const searchTimeoutId = setTimeout(() => {
             showStatus(
               "info",
-              "First search results may be delayed...",
-              "API caching in progress. Subsequent searches will be faster!"
+              "Search is taking a bit longer...",
+              "Connecting to music services (JioSaavn, SoundCloud, etc). Please wait..."
             );
-          }, 10000);
+          }, 20000);
 
           // Disable search button
           searchBtn.disabled = true;
@@ -3748,6 +3748,7 @@
             pollDownloadStatus(downloadId, button, title, 0); // Start with attempt 0
           }
         } catch (error) {
+          console.error("Download start error:", error);
           if (button) {
             button.className = "download-btn";
             button.innerHTML = "❌ Failed";
@@ -3796,6 +3797,9 @@
           }
 
           const data = await response.json();
+
+          // Debug logging
+          console.log(`Download Status [${downloadId}]:`, data);
 
           // Update local download data
           allDownloads[downloadId] = data;
@@ -3888,6 +3892,7 @@
         } catch (error) {
           // Check if it's a network error or timeout
           const errorMessage = error.message || "Unknown error";
+          console.error("Poll status error:", error);
 
           if (button) {
             button.className = "download-btn";
