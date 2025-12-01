@@ -1,0 +1,10 @@
+Flask
+Flask-CORS
+gunicorn
+yt-dlp
+requests
+python-dotenv
+beautifulsoup4
+selenium
+lxml
+yt-dlp-proxy

@@ -803,6 +803,13 @@ def download_song(url, title, download_id, advanced_options=None):
     """Download song/video using yt-dlp with optional advanced parameters and progress tracking"""
     global download_status, active_processes
     
+    print(f"\n{'='*70}")
+    print(f"🎵 Starting download: {title}")
+    print(f"🔗 URL: {url}")
+    print(f"🆔 Download ID: {download_id}")
+    print(f"⚙️  Advanced Options: {advanced_options}")
+    print(f"{'='*70}\n")
+    
     # Clean up /tmp if getting full (Heroku)
     cleanup_tmp_directory()
     
@@ -1000,19 +1007,34 @@ def download_song(url, title, download_id, advanced_options=None):
                     
                     # Parse custom args safely
                     try:
+                        # Define dangerous characters for custom args
+                        DANGEROUS_CHARS_ARGS = ['&&', '||', ';', '|', '`', '$', '\n', '\r']
+                        
                         parsed_args = shlex.split(custom_args)
-                        for arg in parsed_args:
+                        i = 0
+                        while i < len(parsed_args):
+                            arg = parsed_args[i]
+                            
                             # Additional security: check each arg for dangerous chars
-                            has_danger = any(dc in arg for dc in DANGEROUS_CHARS)
+                            has_danger = any(dc in arg for dc in DANGEROUS_CHARS_ARGS)
                             if has_danger:
                                 # Security: Block dangerous argument
+                                i += 1
                                 continue
                             
                             # Only allow whitelisted arguments
                             arg_name = arg.split('=')[0] if '=' in arg else arg
                             if arg_name in SAFE_ARGS:
                                 cmd.append(arg)
+                                # If this argument expects a value (doesn't have =), add the next item too
+                                if '=' not in arg and i + 1 < len(parsed_args):
+                                    next_arg = parsed_args[i + 1]
+                                    # Check if next arg doesn't start with -- (meaning it's a value, not a new flag)
+                                    if not next_arg.startswith('-'):
+                                        cmd.append(next_arg)
+                                        i += 1  # Skip the value in next iteration
                             # Security: Block unsafe argument
+                            i += 1
                     except Exception as e:
                         # Security: Failed to parse custom args (ignored)
                         pass
@@ -1027,9 +1049,13 @@ def download_song(url, title, download_id, advanced_options=None):
             ])
             output_template = os.path.join(app.config['DOWNLOAD_FOLDER'], f"%(title)s.%(ext)s")
         
+        # Create a unique directory for this download to avoid filename collisions
+        download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+        os.makedirs(download_dir, exist_ok=True)
+
         # Common options with newline progress for parsing
         cmd.extend([
-            '-P', app.config['DOWNLOAD_FOLDER'],
+            '-P', download_dir,
             '-o', '%(title)s.%(ext)s',
             '--newline',  # Progress on new lines for easier parsing
             url
@@ -1063,6 +1089,10 @@ def download_song(url, title, download_id, advanced_options=None):
         # Track error messages from yt-dlp
         error_messages = []
         has_progress = False
+        current_file_index = 0
+        total_playlist_files = 0
+        completed_files = []  # Track completed files as they finish
+        current_downloading_file = None  # Track current file being downloaded
         
         # Parse progress in real-time
         for line in process.stdout:
@@ -1073,12 +1103,27 @@ def download_song(url, title, download_id, advanced_options=None):
                 break
                 
             line = line.strip()
-            # Skip printing every line for cleaner output
+            
+            # Log all output for debugging
+            if line:
+                print(f"[yt-dlp] {line}")
+            
+            # Detect playlist download info: [download] Downloading item 2 of 5
+            if '[download] Downloading item' in line or '[download] Downloading video' in line:
+                playlist_match = regex.search(r'Downloading (?:item|video) (\d+) of (\d+)', line)
+                if playlist_match:
+                    current_file_index = int(playlist_match.group(1))
+                    total_playlist_files = int(playlist_match.group(2))
+                    print(f"📦 Playlist progress: {current_file_index}/{total_playlist_files}")
+                    # Update title to show playlist progress
+                    download_status[download_id]['title'] = f"Downloading {current_file_index}/{total_playlist_files}"
+                    save_download_status()
             
             # Detect ERROR messages from yt-dlp
             if 'ERROR:' in line:
                 error_msg = line.replace('ERROR:', '').strip()
                 error_messages.append(error_msg)
+                print(f"❌ Error detected: {error_msg}")
             
             # Detect common error patterns
             error_patterns = [
@@ -1095,10 +1140,14 @@ def download_song(url, title, download_id, advanced_options=None):
                 'Requested format is not available',
                 'Sign in to confirm',
                 'members-only content',
+                'not supported',
+                'Unsupported site',
+                'No video formats found',
             ]
             
             if any(pattern.lower() in line.lower() for pattern in error_patterns):
                 error_messages.append(line)
+                print(f"⚠️  Error pattern matched: {line}")
             
             # Parse download progress: [download]  45.2% of 3.50MiB at 1.23MiB/s ETA 00:02
             if '[download]' in line and '%' in line:
@@ -1109,6 +1158,66 @@ def download_song(url, title, download_id, advanced_options=None):
                     if percent_match:
                         progress = float(percent_match.group(1))
                         
+                        # Check if a file just completed (100%)
+                        if progress >= 100.0 and total_playlist_files > 0:
+                            # A file in the playlist just completed
+                            print(f"✅ File {current_file_index}/{total_playlist_files} completed!")
+                            
+                            # Find the most recently created file
+                            download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+                            try:
+                                existing_files = os.listdir(download_dir)
+                                if existing_files:
+                                    # Get the newest file
+                                    newest_file = max(
+                                        [os.path.join(download_dir, f) for f in existing_files],
+                                        key=os.path.getctime
+                                    )
+                                    filename = os.path.basename(newest_file)
+                                    
+                                    # Check if we haven't already added this file
+                                    if filename not in [f['file'] for f in completed_files]:
+                                        file_title = os.path.splitext(filename)[0]
+                                        file_download_id = f"{download_id}_file_{len(completed_files)}"
+                                        
+                                        # Create individual file status immediately
+                                        download_status[file_download_id] = {
+                                            'status': 'complete',
+                                            'progress': 100,
+                                            'title': file_title,
+                                            'url': url,
+                                            'file': filename,
+                                            'speed': 'Complete',
+                                            'eta': '0:00',
+                                            'timestamp': download_status[download_id]['timestamp'],
+                                            'completed_at': datetime.now().isoformat(),
+                                            'advanced_options': advanced_options,
+                                            'parent_download_id': download_id,
+                                            'file_index': len(completed_files) + 1,
+                                            'total_files': total_playlist_files
+                                        }
+                                        
+                                        completed_files.append({
+                                            'download_id': file_download_id,
+                                            'title': file_title,
+                                            'file': filename
+                                        })
+                                        
+                                        # Update main download status with completed files so far
+                                        download_status[download_id]['file_downloads'] = completed_files.copy()
+                                        save_download_status()
+                                        print(f"💾 Saved completed file {len(completed_files)}/{total_playlist_files}: {file_title}")
+                            except Exception as e:
+                                print(f"⚠️  Error checking completed file: {e}")
+                        
+                        # If this is a playlist, calculate overall progress
+                        if total_playlist_files > 0:
+                            # Progress = (completed files + current file progress) / total files
+                            files_done = len(completed_files)
+                            current_file_progress = progress / 100.0
+                            overall_progress = ((files_done + current_file_progress) / total_playlist_files) * 100
+                            progress = overall_progress
+                        
                         # Extract speed
                         speed_match = regex.search(r'at\s+([\d\.]+\s*[KMG]iB/s)', line)
                         speed = speed_match.group(1) if speed_match else 'Unknown'
@@ -1117,13 +1226,21 @@ def download_song(url, title, download_id, advanced_options=None):
                         eta_match = regex.search(r'ETA\s+([\d:]+)', line)
                         eta = eta_match.group(1) if eta_match else 'Unknown'
                         
+                        # Update title with playlist info if applicable
+                        display_title = title
+                        if total_playlist_files > 0:
+                            display_title = f"Downloading {current_file_index}/{total_playlist_files}: {title}"
+                        
                         download_status[download_id] = {
                             'status': 'downloading',
                             'progress': min(progress, 99),  # Cap at 99% until complete
-                            'title': title,
+                            'title': display_title,
                             'url': url,
                             'speed': speed,
                             'eta': eta,
+                            'current_file': current_file_index if total_playlist_files > 0 else None,
+                            'total_files': total_playlist_files if total_playlist_files > 0 else None,
+                            'file_downloads': completed_files.copy() if completed_files else None,  # Include completed files
                             'timestamp': download_status[download_id]['timestamp'],
                             'advanced_options': advanced_options
                         }
@@ -1137,15 +1254,23 @@ def download_song(url, title, download_id, advanced_options=None):
             del active_processes[download_id]
         
         process.wait()
+        return_code = process.returncode
+        print(f"\n🏁 Process completed with return code: {return_code}")
+        print(f"📊 Has progress: {has_progress}")
+        print(f"❌ Error messages: {len(error_messages)}")
+        if error_messages:
+            print(f"   Errors: {error_messages[:3]}")
         
         # Check if cancelled during execution
         if download_status.get(download_id, {}).get('status') == 'cancelled':
+            print(f"🚫 Download was cancelled, exiting")
             return
         
         # Check for errors even if return code is 0 (yt-dlp sometimes returns 0 on errors)
         if error_messages:
             # Combine error messages
             error_text = ' | '.join(error_messages[:3])  # Limit to first 3 errors
+            print(f"❌ Download failed with errors: {error_text}")
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
@@ -1159,35 +1284,125 @@ def download_song(url, title, download_id, advanced_options=None):
                 'advanced_options': advanced_options
             }
             save_download_status()
+            print(f"💾 Status saved as 'error'")
             return
         
         if process.returncode == 0 and has_progress:
-            # Find the downloaded file
-            download_folder = app.config['DOWNLOAD_FOLDER']
-            files = os.listdir(download_folder)
-            
-            # Get the most recently created file
-            latest_file = max(
-                [os.path.join(download_folder, f) for f in files],
-                key=os.path.getctime,
-                default=None
-            )
-            
-            if latest_file:
-                filename = os.path.basename(latest_file)
-                download_status[download_id] = {
-                    'status': 'complete',
-                    'progress': 100,
-                    'title': title,
-                    'url': url,
-                    'file': filename,
-                    'speed': 'Complete',
-                    'eta': '0:00',
-                    'timestamp': download_status[download_id]['timestamp'],
-                    'completed_at': datetime.now().isoformat(),
-                    'advanced_options': advanced_options
-                }
-            else:
+            print(f"✅ Download completed successfully")
+            # Find the downloaded file in the unique directory
+            download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+            try:
+                files = os.listdir(download_dir)
+                print(f"📁 Files in download folder: {len(files)}")
+                
+                # Check if multiple files were downloaded (playlist)
+                if len(files) > 1:
+                    # Multiple files - playlist download
+                    print(f"📦 Multiple files detected: {len(files)} files")
+                    
+                    # If we already tracked files during download, use that
+                    if completed_files and len(completed_files) > 0:
+                        print(f"✅ Using already tracked {len(completed_files)} files")
+                        file_downloads = completed_files
+                    else:
+                        # Fallback: create file entries now
+                        print(f"⚠️  No tracked files, creating entries now")
+                        all_files = sorted(
+                            [os.path.join(download_dir, f) for f in files],
+                            key=os.path.getctime
+                        )
+                        
+                        file_downloads = []
+                        for idx, file_path in enumerate(all_files):
+                            filename = os.path.basename(file_path)
+                            file_title = os.path.splitext(filename)[0]
+                            file_download_id = f"{download_id}_file_{idx}"
+                            
+                            # Create individual file status
+                            download_status[file_download_id] = {
+                                'status': 'complete',
+                                'progress': 100,
+                                'title': file_title,
+                                'url': url,
+                                'file': filename,
+                                'speed': 'Complete',
+                                'eta': '0:00',
+                                'timestamp': download_status[download_id]['timestamp'],
+                                'completed_at': datetime.now().isoformat(),
+                                'advanced_options': advanced_options,
+                                'parent_download_id': download_id,
+                                'file_index': idx + 1,
+                                'total_files': len(files)
+                            }
+                            
+                            file_downloads.append({
+                                'download_id': file_download_id,
+                                'title': file_title,
+                                'file': filename
+                            })
+                    
+                    # Create summary title using first file
+                    first_file_title = file_downloads[0]['title'] if file_downloads else "Playlist"
+                    actual_title = f"{first_file_title} (+{len(files)-1} more)"
+                    
+                    # Update main download status with references to individual files
+                    download_status[download_id] = {
+                        'status': 'complete',
+                        'progress': 100,
+                        'title': actual_title,
+                        'url': url,
+                        'file_count': len(files),
+                        'file_downloads': file_downloads,  # Individual file download IDs
+                        'speed': 'Complete',
+                        'eta': '0:00',
+                        'timestamp': download_status[download_id]['timestamp'],
+                        'completed_at': datetime.now().isoformat(),
+                        'advanced_options': advanced_options
+                    }
+                    print(f"💾 Status saved as 'complete' with {len(files)} individual file downloads, title: {actual_title}")
+                else:
+                    # Single file download
+                    latest_file = max(
+                        [os.path.join(download_dir, f) for f in files],
+                        key=os.path.getctime,
+                        default=None
+                    ) if files else None
+                    
+                    if latest_file:
+                        filename = os.path.basename(latest_file)
+                        print(f"📄 Downloaded file: {filename}")
+                        
+                        # Extract actual title from filename (remove extension)
+                        actual_title = os.path.splitext(filename)[0]
+                        
+                        download_status[download_id] = {
+                            'status': 'complete',
+                            'progress': 100,
+                            'title': actual_title,  # Use extracted title instead of original
+                            'url': url,
+                            'file': filename,
+                            'speed': 'Complete',
+                            'eta': '0:00',
+                            'timestamp': download_status[download_id]['timestamp'],
+                            'completed_at': datetime.now().isoformat(),
+                            'advanced_options': advanced_options
+                        }
+                        print(f"💾 Status saved as 'complete' with file: {filename}, title: {actual_title}")
+                    else:
+                        download_status[download_id] = {
+                            'status': 'complete',
+                            'progress': 100,
+                            'title': title,
+                            'url': url,
+                            'file': f"{safe_title}.mp3",
+                            'speed': 'Complete',
+                            'eta': '0:00',
+                            'timestamp': download_status[download_id]['timestamp'],
+                            'completed_at': datetime.now().isoformat(),
+                            'advanced_options': advanced_options
+                        }
+            except FileNotFoundError:
+                latest_file = None
                 download_status[download_id] = {
                     'status': 'complete',
                     'progress': 100,
@@ -1201,19 +1416,51 @@ def download_song(url, title, download_id, advanced_options=None):
                     'advanced_options': advanced_options
                 }
         elif process.returncode == 0 and not has_progress:
-            # yt-dlp returned 0 but no download progress - likely an error
+            # yt-dlp returned 0 but no download progress - check if file was actually created
+            download_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id)
+            try:
+                files = os.listdir(download_dir)
+                if files:
+                    # File was created even without progress output - treat as success
+                    filename = files[0]  # Take first file
+                    print(f"✅ Download completed (no progress output but file created): {filename}")
+                    
+                    # Extract actual title from filename (remove extension)
+                    actual_title = os.path.splitext(filename)[0]
+                    
+                    download_status[download_id] = {
+                        'status': 'complete',
+                        'progress': 100,
+                        'title': actual_title,  # Use extracted title instead of original
+                        'url': url,
+                        'file': filename,
+                        'speed': 'Complete',
+                        'eta': '0:00',
+                        'timestamp': download_status[download_id]['timestamp'],
+                        'completed_at': datetime.now().isoformat(),
+                        'advanced_options': advanced_options
+                    }
+                    print(f"💾 Status saved as 'complete' with file: {filename}, title: {actual_title}")
+                    save_download_status()
+                    return
+            except Exception:
+                pass
+            
+            # No file found - likely an error
+            print(f"⚠️  No download progress detected (return code 0)")
             download_status[download_id] = {
                 'status': 'error',
                 'progress': 0,
                 'title': title,
                 'url': url,
-                'error': 'No download progress detected. URL may be invalid or unavailable.',
+                'error': 'No download progress detected. URL may be invalid, unsupported, or unavailable.',
                 'speed': '0 KB/s',
                 'eta': 'N/A',
                 'timestamp': download_status[download_id]['timestamp'],
                 'failed_at': datetime.now().isoformat(),
                 'advanced_options': advanced_options
             }
+            print(f"💾 Status saved as 'error' (no progress)")
         else:
             # Process returned non-zero exit code
             error_text = 'Download failed'
@@ -1443,10 +1690,11 @@ def get_jiosaavn_suggestions(query):
     """Get search suggestions from JioSaavn search"""
     try:
         # Use JioSaavn search to get relevant song titles
-        from jiosaavn_api import search_songs
+        from jiosaavn_search import JioSaavnAPI
         
-        results = search_songs(query, limit=3)
-        if results and 'data' in results and 'results' in results['data']:
+        api = JioSaavnAPI()
+        results = api.search_songs(query, limit=3)
+        if results and 'results' in results:
             suggestions = []
             for song in results['data']['results'][:3]:
                 if 'title' in song:
@@ -1542,8 +1790,16 @@ def download():
     title = data.get('title')
     advanced_options = data.get('advancedOptions')
     
+    print(f"\n{'='*70}")
+    print(f"📥 Download request received")
+    print(f"   URL: {url}")
+    print(f"   Title: {title}")
+    print(f"   Advanced Options: {advanced_options}")
+    print(f"{'='*70}\n")
+    
     # SECURITY: Validate required parameters
     if not url or not title:
+        print(f"❌ Missing required parameters")
         return jsonify({'error': 'Missing url or title'}), 400
     
     # SECURITY: Validate URL format
@@ -1556,9 +1812,17 @@ def download():
         if dangerous_char in title:
             return jsonify({'error': f'Security: Dangerous character detected in title'}), 400
     
-    # SECURITY: Validate title (prevent path traversal)
-    if not isinstance(title, str) or '..' in title or '/' in title or '\\' in title:
-        return jsonify({'error': 'Invalid title'}), 400
+    # SECURITY: Sanitize title (prevent path traversal but allow URLs)
+    # Replace path separators and dangerous characters instead of rejecting
+    if not isinstance(title, str):
+        return jsonify({'error': 'Invalid title type'}), 400
+    
+    # Check for path traversal attempts
+    if '..' in title:
+        return jsonify({'error': 'Invalid title: path traversal detected'}), 400
+    
+    # Sanitize the title by replacing path separators and other unsafe characters
+    title = title.replace('\\', '_').replace('/', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
     
     # SECURITY: Limit title length
     if len(title) > 200:
@@ -1580,11 +1844,16 @@ def download():
     # Generate download ID
     download_id = f"download_{datetime.now().timestamp()}"
     
+    print(f"🆔 Generated download ID: {download_id}")
+    print(f"🚀 Starting download thread...")
+    
     thread = threading.Thread(
         target=download_song,
         args=(url, title, download_id, advanced_options)
     )
     thread.start()
+    
+    print(f"✅ Download thread started\n")
     
     return jsonify({
         'download_id': download_id,
@@ -1599,9 +1868,17 @@ def download_status_check(download_id):
         status = download_status[download_id]
         # If download complete, add file download URL
         if status['status'] == 'complete' and 'file' in status:
-            status['download_url'] = f"/get_file/{status['file']}"
+            status['download_url'] = f"/get_file/{download_id}/{status['file']}"
+        
+        # Log status check (only for interesting states to avoid spam)
+        if status['status'] in ['error', 'complete', 'cancelled']:
+            print(f"📊 Status check [{download_id}]: {status['status']}")
+            if status['status'] == 'error' and 'error' in status:
+                print(f"   Error: {status['error']}")
+        
         return jsonify(status)
     else:
+        print(f"❓ Status check for unknown download_id: {download_id}")
         return jsonify({'status': 'not_found'}), 404
 
 
@@ -1633,9 +1910,155 @@ def get_all_downloads():
     # Add download URLs for completed files
     for download_id, status in filtered_downloads.items():
         if status['status'] == 'complete' and 'file' in status:
-            status['download_url'] = f"/get_file/{status['file']}"
+            status['download_url'] = f"/get_file/{download_id}/{status['file']}"
     
     return jsonify(filtered_downloads)
+
+
+@app.route('/bulk_download', methods=['POST'])
+def bulk_download():
+    """Handle bulk download request - process URLs sequentially"""
+    data = request.get_json()
+    urls = data.get('urls', [])
+    advanced_options = data.get('advancedOptions')
+    
+    if not urls or not isinstance(urls, list):
+        return jsonify({'error': 'URLs list is required'}), 400
+    
+    # Validate URLs
+    valid_urls = []
+    for url in urls:
+        if isinstance(url, str) and url.startswith(('http://', 'https://')):
+            valid_urls.append(url.strip())
+    
+    if not valid_urls:
+        return jsonify({'error': 'No valid URLs provided'}), 400
+    
+    print(f"\n{'='*70}")
+    print(f"📦 Bulk download request: {len(valid_urls)} URLs")
+    print(f"⚙️  Advanced Options: {advanced_options}")
+    print(f"{'='*70}\n")
+    
+    # Generate bulk ID
+    bulk_id = f"bulk_{datetime.now().timestamp()}"
+    
+    # Initialize bulk download status
+    bulk_downloads = []
+    for i, url in enumerate(valid_urls):
+        download_id = f"{bulk_id}_item_{i}"
+        bulk_downloads.append({
+            'url': url,
+            'title': f"Item {i+1}",
+            'status': 'queued',
+            'progress': 0,
+            'download_id': download_id,
+            'error': None,
+            'speed': 'Queued',
+            'eta': 'N/A'
+        })
+        
+        # Add to download_status for tracking
+        download_status[download_id] = {
+            'status': 'queued',
+            'progress': 0,
+            'title': f"Item {i+1}",
+            'url': url,
+            'speed': 'Queued',
+            'eta': 'N/A',
+            'timestamp': datetime.now().isoformat(),
+            'bulk_id': bulk_id,
+            'advanced_options': advanced_options
+        }
+    
+    # Store bulk info
+    download_status[bulk_id] = {
+        'type': 'bulk',
+        'status': 'processing',
+        'downloads': bulk_downloads,
+        'total': len(valid_urls),
+        'completed': 0,
+        'failed': 0,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    save_download_status()
+    
+    # Start sequential downloads in background thread
+    def process_bulk_downloads():
+        for i, download_info in enumerate(bulk_downloads):
+            download_id = download_info['download_id']
+            url = download_info['url']
+            title = download_info['title']
+            
+            print(f"\n📥 Processing bulk item {i+1}/{len(valid_urls)}: {url}")
+            
+            # Update status to downloading
+            download_status[download_id]['status'] = 'downloading'
+            download_status[bulk_id]['downloads'][i]['status'] = 'downloading'
+            save_download_status()
+            
+            # Download the song
+            download_song(url, title, download_id, advanced_options)
+            
+            # Update bulk stats
+            if download_status[download_id]['status'] == 'complete':
+                download_status[bulk_id]['completed'] += 1
+            elif download_status[download_id]['status'] == 'error':
+                download_status[bulk_id]['failed'] += 1
+            
+            # Update download info in bulk
+            download_status[bulk_id]['downloads'][i] = {
+                'url': url,
+                'title': download_status[download_id].get('title', title),
+                'status': download_status[download_id]['status'],
+                'progress': download_status[download_id]['progress'],
+                'download_id': download_id,
+                'error': download_status[download_id].get('error'),
+                'speed': download_status[download_id].get('speed', 'N/A'),
+                'eta': download_status[download_id].get('eta', 'N/A'),
+                'download_url': download_status[download_id].get('download_url')
+            }
+            
+            save_download_status()
+        
+        # Mark bulk as complete
+        download_status[bulk_id]['status'] = 'complete'
+        save_download_status()
+        print(f"\n✅ Bulk download complete: {download_status[bulk_id]['completed']}/{len(valid_urls)} successful\n")
+    
+    thread = threading.Thread(target=process_bulk_downloads)
+    thread.start()
+    
+    return jsonify({
+        'bulk_id': bulk_id,
+        'status': 'started',
+        'total': len(valid_urls)
+    })
+
+
+@app.route('/bulk_status/<bulk_id>')
+def bulk_status_check(bulk_id):
+    """Check bulk download status"""
+    if bulk_id in download_status:
+        bulk_status_data = download_status[bulk_id].copy()
+        
+        # Add download URLs for completed downloads
+        if 'downloads' in bulk_status_data:
+            for i, download in enumerate(bulk_status_data['downloads']):
+                download_id = download.get('download_id')
+                if download_id and download_id in download_status:
+                    individual_status = download_status[download_id]
+                    # Add download URL if download is complete and has file
+                    if individual_status.get('status') == 'complete' and 'file' in individual_status:
+                        bulk_status_data['downloads'][i]['download_url'] = f"/get_file/{download_id}/{individual_status['file']}"
+                        bulk_status_data['downloads'][i]['file'] = individual_status['file']
+                        # Update title with actual filename
+                        if 'title' not in bulk_status_data['downloads'][i] or bulk_status_data['downloads'][i]['title'].startswith('Item '):
+                            bulk_status_data['downloads'][i]['title'] = individual_status.get('title', bulk_status_data['downloads'][i]['title'])
+        
+        return jsonify(bulk_status_data)
+    else:
+        return jsonify({'error': 'Bulk download not found'}), 404
 
 
 @app.route('/cancel_download/<download_id>', methods=['POST'])
@@ -1696,11 +2119,15 @@ def clear_downloads():
     })
 
 
-@app.route('/get_file/<filename>')
-def get_file(filename):
+@app.route('/get_file/<download_id>/<filename>')
+def get_file(download_id, filename):
     """Serve downloaded file to browser"""
     try:
-        file_path = os.path.join(app.config['DOWNLOAD_FOLDER'], filename)
+        # Security check for download_id
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', download_id):
+            return jsonify({'error': 'Invalid download ID'}), 400
+        
+        file_path = os.path.join(app.config['DOWNLOAD_FOLDER'], download_id, filename)
         if os.path.exists(file_path):
             return send_file(
                 file_path,

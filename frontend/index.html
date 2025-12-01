@@ -1289,6 +1289,7 @@
   <body>
     <div class="container">
       <div class="header">
+        <button class="theme-toggle" onclick="toggleTheme()">🌓 Theme</button>
         <h1>
           <a
             href="{{ frontend_url }}"
@@ -1311,6 +1312,19 @@
         </h1>
         <p>
           Download high-quality music from YouTube, SoundCloud, JioSaavn & more
+          <br />
+          <a
+            href="bulk.html"
+            style="
+              color: var(--accent-color);
+              text-decoration: none;
+              font-weight: 600;
+              margin-top: 10px;
+              display: inline-block;
+            "
+          >
+            Bulk & Playlist Downloader →
+          </a>
         </p>
       </div>
 
@@ -1414,8 +1428,8 @@
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
-          Search by name or paste a music URL (YouTube, SoundCloud, JioSaavn,
-          Spotify, etc.)
+          Search by name or paste a music URL (YouTube, SoundCloud, JioSaavn
+          etc.)
         </div>
       </div>
 
@@ -1530,6 +1544,29 @@
       let advancedOptionsVisible = false;
       let downloadManagerVisible = false;
       let allDownloads = {};
+
+      // Load downloads from localStorage on page load
+      function loadDownloadsFromStorage() {
+        try {
+          const stored = localStorage.getItem("allDownloads");
+          if (stored) {
+            allDownloads = JSON.parse(stored);
+            updateDownloadManager();
+            updateDownloadBadge();
+          }
+        } catch (e) {
+          console.error("Error loading downloads from storage:", e);
+        }
+      }
+
+      // Save downloads to localStorage
+      function saveDownloadsToStorage() {
+        try {
+          localStorage.setItem("allDownloads", JSON.stringify(allDownloads));
+        } catch (e) {
+          console.error("Error saving downloads to storage:", e);
+        }
+      }
 
       // Download Queue Management
       const MAX_CONCURRENT_DOWNLOADS = 3;
@@ -1736,9 +1773,15 @@
           );
           const result = await response.json();
 
+          if (allDownloads[downloadId]) {
+            allDownloads[downloadId].status = "cancelled";
+            saveDownloadsToStorage();
+            updateDownloadManager();
+            updateDownloadBadge();
+          }
+
           if (response.ok) {
             showNotification(result.message, "info");
-            loadAllDownloads(); // Refresh
           } else {
             showNotification(result.error, "error");
           }
@@ -1771,17 +1814,19 @@
 
       // Clear finished downloads
       async function clearFinishedDownloads() {
-        try {
-          const response = await fetch(`${getApiBaseUrl()}/clear_downloads`, {
-            method: "POST",
-          });
-          const result = await response.json();
-
-          showNotification(result.message, "success");
-          loadAllDownloads(); // Refresh
-        } catch (error) {
-          showNotification("Failed to clear downloads", "error");
+        for (let id in allDownloads) {
+          if (
+            allDownloads[id].status === "complete" ||
+            allDownloads[id].status === "error" ||
+            allDownloads[id].status === "cancelled"
+          ) {
+            delete allDownloads[id];
+          }
         }
+        saveDownloadsToStorage();
+        updateDownloadManager();
+        updateDownloadBadge();
+        showNotification("Finished downloads cleared", "success");
       }
 
       // Handle browser back/forward navigation
@@ -2093,8 +2138,9 @@
         localStorage.setItem("theme", isLight ? "light" : "dark");
       }
 
-      // Load saved theme - NO download persistence
+      // Load saved theme and downloads
       window.addEventListener("DOMContentLoaded", () => {
+        loadDownloadsFromStorage();
         const savedTheme = localStorage.getItem("theme");
         if (savedTheme === "light") {
           document.body.classList.add("light-theme");
@@ -3616,6 +3662,13 @@
         useAdvanced = false,
         button = null
       ) {
+        console.log(`\n${"=".repeat(70)}`);
+        console.log(`🎵 Starting download`);
+        console.log(`   Title: ${title}`);
+        console.log(`   URL: ${url}`);
+        console.log(`   Use Advanced: ${useAdvanced}`);
+        console.log(`${"=".repeat(70)}\n`);
+
         // Find button if not provided
         if (!button) {
           // Try to find the button for this song (for resumed downloads)
@@ -3726,6 +3779,8 @@
             }
           }
 
+          console.log(`📤 Sending download request:`, requestBody);
+
           const response = await fetch(`${getApiBaseUrl()}/download`, {
             method: "POST",
             headers: {
@@ -3734,21 +3789,28 @@
             body: JSON.stringify(requestBody),
           });
 
+          console.log(`📡 Download response status: ${response.status}`);
+
           const data = await response.json();
+
+          console.log(`📦 Download response data:`, data);
 
           // Check for API errors
           if (!response.ok || data.error) {
+            console.error(`❌ Download request error:`, data);
             throw new Error(data.error || "Download request failed");
           }
 
           const downloadId = data.download_id;
+
+          console.log(`✅ Download initiated with ID: ${downloadId}`);
 
           // Poll download status with timeout tracking
           if (button) {
             pollDownloadStatus(downloadId, button, title, 0); // Start with attempt 0
           }
         } catch (error) {
-          console.error("Download start error:", error);
+          console.error("❌ Download start error:", error);
           if (button) {
             button.className = "download-btn";
             button.innerHTML = "❌ Failed";
@@ -3768,10 +3830,13 @@
         title,
         attemptCount = 0
       ) {
-        const MAX_ATTEMPTS = 600; // Maximum 5 minutes of polling (600 * 500ms = 5 min)
+        const MAX_ATTEMPTS = 120; // Maximum 2 minutes of polling with exponential backoff
 
         // Safety check: stop polling after too many attempts
         if (attemptCount >= MAX_ATTEMPTS) {
+          console.error(
+            `⏱️ Polling timeout for ${downloadId} after ${attemptCount} attempts`
+          );
           if (button) {
             button.className = "download-btn";
             button.innerHTML = "⏱️ Timeout";
@@ -3802,7 +3867,17 @@
           console.log(`Download Status [${downloadId}]:`, data);
 
           // Update local download data
-          allDownloads[downloadId] = data;
+          allDownloads[downloadId] = {
+            id: downloadId,
+            title: data.title || title,
+            url: url,
+            status: data.status,
+            progress: data.progress || 0,
+            error: data.error || null,
+            download_url: data.download_url || null,
+          };
+
+          saveDownloadsToStorage();
           updateDownloadManager();
           updateDownloadBadge();
 
@@ -3811,25 +3886,23 @@
               button.className = "download-btn complete";
               button.innerHTML =
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 5px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Downloaded';
+            }
 
-              // Trigger browser download
-              if (data.download_url) {
-                const link = document.createElement("a");
-                // Ensure full URL for download
-                link.href = data.download_url.startsWith("http")
-                  ? data.download_url
-                  : `${getApiBaseUrl()}${data.download_url}`;
-                link.download = data.file;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+            // Automatically trigger browser download
+            if (data.download_url) {
+              const link = document.createElement("a");
+              // Ensure full URL for download
+              link.href = data.download_url.startsWith("http")
+                ? data.download_url
+                : `${getApiBaseUrl()}${data.download_url}`;
+              link.download = data.file || title || "download";
+              link.style.display = "none";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
 
-                // Show notification
-                showNotification(
-                  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 5px;"><polyline points="20 6 9 17 4 12"></polyline></svg>${data.title} downloaded successfully!`,
-                  "success"
-                );
-              }
+              console.log(`✅ Auto-downloaded: ${title}`);
+              showNotification(`Downloaded: ${title}`, "success");
             }
 
             // Download finished, process next in queue
@@ -3865,6 +3938,12 @@
             const speed = data.speed || "N/A";
             const eta = data.eta || "N/A";
 
+            console.log(
+              `⏳ Downloading [${downloadId}]: ${Math.round(
+                progress
+              )}% - ${speed} - ETA ${eta}`
+            );
+
             if (button) {
               button.className = "download-btn downloading";
               button.innerHTML = `
@@ -3875,24 +3954,44 @@
                         `;
             }
 
+            // Use exponential backoff: start at 1s, max 5s
+            const pollInterval = Math.min(1000 + attemptCount * 100, 5000);
+            console.log(
+              `🔄 Polling again in ${pollInterval}ms (attempt ${
+                attemptCount + 1
+              })`
+            );
+
             // Keep polling with incremented attempt count
             setTimeout(
               () =>
                 pollDownloadStatus(downloadId, button, title, attemptCount + 1),
-              2000
+              pollInterval
             );
           } else {
             // Keep polling for other statuses (preparing, queued, etc.) with incremented attempt count
+            console.log(
+              `🔄 Status '${data.status}' - polling again (attempt ${
+                attemptCount + 1
+              })`
+            );
+
+            // Use exponential backoff for unknown states too
+            const pollInterval = Math.min(1000 + attemptCount * 100, 5000);
+
             setTimeout(
               () =>
                 pollDownloadStatus(downloadId, button, title, attemptCount + 1),
-              2000
+              pollInterval
             );
           }
         } catch (error) {
           // Check if it's a network error or timeout
           const errorMessage = error.message || "Unknown error";
-          console.error("Poll status error:", error);
+          console.error(`❌ Poll status error for ${downloadId}:`, error);
+          console.error(
+            `   Attempt: ${attemptCount}, URL: ${getApiBaseUrl()}/download_status/${downloadId}`
+          );
 
           if (button) {
             button.className = "download-btn";

@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bulk & Playlist Downloader</title>
+    <link rel="icon" type="image/png" href="static/fevicon2.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-primary: #0f0f0f;
+        --bg-secondary: #1a1a1a;
+        --bg-card: #1f1f1f;
+        --text-primary: #f0f0f0;
+        --text-secondary: #d1d5db;
+        --text-tertiary: #9ca3af;
+        --accent-color: #34d399;
+        --accent-secondary: #10b981;
+        --border-color: #374151;
+        --shadow-color: rgba(52, 211, 153, 0.2);
+        --success-color: #34d399;
+        --error-color: #f87171;
+        --warning-color: #fbbf24;
+        --info-color: #a78bfa;
+        --gradient-primary: linear-gradient(135deg, #c084fc 0%, #7c3aed 100%);
+        --gradient-secondary: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+      }
+
+      body.light-theme {
+        --bg-primary: #fafafa;
+        --bg-secondary: #f5f5f5;
+        --bg-card: #ffffff;
+        --text-primary: #2d2d2d;
+        --text-secondary: #6b7280;
+        --text-tertiary: #9ca3af;
+        --accent-color: #10b981;
+        --accent-secondary: #059669;
+        --border-color: #e5e7eb;
+        --shadow-color: rgba(16, 185, 129, 0.15);
+        --success-color: #10b981;
+        --error-color: #ef4444;
+        --warning-color: #f59e0b;
+        --info-color: #8b5cf6;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          system-ui, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        min-height: 100vh;
+        padding: 20px;
+        transition: all 0.3s ease;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        padding: 30px 0;
+        margin-bottom: 30px;
+        position: relative;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        color: var(--accent-color);
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        color: var(--text-secondary);
+        font-size: 1.1em;
+      }
+
+      .nav-links {
+        position: absolute;
+        top: 30px;
+        left: 20px;
+        display: flex;
+        gap: 15px;
+      }
+
+      .nav-link {
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 8px 20px;
+        border-radius: 8px;
+        border: 2px solid var(--border-color);
+        transition: all 0.3s;
+        font-weight: 500;
+      }
+
+      .nav-link:hover {
+        background: var(--accent-color);
+        color: var(--bg-primary);
+        border-color: var(--accent-color);
+      }
+
+      .theme-toggle {
+        position: absolute;
+        top: 30px;
+        right: 20px;
+        background: var(--bg-card);
+        border: 2px solid var(--border-color);
+        border-radius: 25px;
+        padding: 8px 15px;
+        cursor: pointer;
+        transition: all 0.3s;
+        color: var(--text-secondary);
+      }
+
+      .theme-toggle:hover {
+        background: var(--accent-color);
+        color: var(--bg-primary);
+        border-color: var(--accent-color);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+        justify-content: center;
+      }
+
+      .tab-btn {
+        padding: 12px 30px;
+        font-size: 1em;
+        font-weight: 600;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .tab-btn:hover {
+        background: var(--accent-color);
+        color: var(--bg-primary);
+      }
+
+      .tab-btn.active {
+        background: var(--gradient-secondary);
+        color: white;
+        border-color: var(--accent-color);
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .content-box {
+        background: var(--bg-card);
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border-color);
+        margin-bottom: 30px;
+      }
+
+      .section-title {
+        font-size: 1.5em;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+      }
+
+      .url-input-area {
+        width: 100%;
+        min-height: 300px;
+        padding: 15px;
+        background: var(--bg-primary);
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        color: var(--text-primary);
+        font-family: "Courier New", monospace;
+        font-size: 0.95em;
+        resize: vertical;
+        margin-bottom: 15px;
+      }
+
+      .url-input-area:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px var(--shadow-color);
+      }
+
+      .input-group {
+        margin-bottom: 20px;
+      }
+
+      .input-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--text-secondary);
+        font-weight: 600;
+      }
+
+      .input-group input,
+      .input-group select {
+        width: 100%;
+        padding: 12px 15px;
+        background: var(--bg-primary);
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 1em;
+      }
+
+      .input-group input:focus,
+      .input-group select:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px var(--shadow-color);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+
+      .checkbox-group input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        color: var(--text-secondary);
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      .btn {
+        padding: 15px 40px;
+        font-size: 1.1em;
+        font-weight: 600;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        flex: 1;
+      }
+
+      .btn-primary {
+        background: var(--gradient-secondary);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px var(--shadow-color);
+      }
+
+      .btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        border: 2px solid var(--border-color);
+      }
+
+      .btn-secondary:hover {
+        background: var(--border-color);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .progress-section {
+        margin-top: 30px;
+      }
+
+      .download-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+      }
+
+      .download-item.downloading {
+        border-left: 4px solid var(--info-color);
+      }
+
+      .download-item.complete {
+        border-left: 4px solid var(--success-color);
+      }
+
+      .download-item.error {
+        border-left: 4px solid var(--error-color);
+      }
+
+      .download-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .download-title {
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .download-status {
+        font-size: 0.9em;
+        padding: 4px 12px;
+        border-radius: 5px;
+        font-weight: 600;
+      }
+
+      .status-queued {
+        background: rgba(167, 139, 250, 0.2);
+        color: var(--info-color);
+      }
+
+      .status-downloading {
+        background: rgba(52, 211, 153, 0.2);
+        color: var(--accent-color);
+      }
+
+      .status-complete {
+        background: rgba(52, 211, 153, 0.2);
+        color: var(--success-color);
+      }
+
+      .status-error {
+        background: rgba(248, 113, 113, 0.2);
+        color: var(--error-color);
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: var(--border-color);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: var(--accent-color);
+        transition: width 0.3s;
+        border-radius: 4px;
+      }
+
+      .download-info {
+        font-size: 0.85em;
+        color: var(--text-tertiary);
+      }
+
+      .download-link {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 8px 16px;
+        background: var(--accent-color);
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 0.9em;
+        font-weight: 600;
+        transition: all 0.3s;
+      }
+
+      .download-link:hover {
+        background: var(--accent-secondary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+      }
+
+      .download-link svg {
+        vertical-align: middle;
+        margin-right: 5px;
+      }
+
+      /* Download Manager Styles */
+      .download-manager {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 400px;
+        max-height: 70vh;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        overflow: hidden;
+        display: none;
+      }
+
+      .download-manager.show {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .download-manager-header {
+        padding: 15px 20px;
+        background: var(--accent-color);
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-radius: 12px 12px 0 0;
+      }
+
+      .download-manager-header h3 {
+        margin: 0;
+        font-size: 1.1em;
+        font-weight: 600;
+      }
+
+      .download-manager-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+      }
+
+      .manager-download-item {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+      }
+
+      .manager-download-item.complete {
+        border-left: 4px solid var(--success-color);
+      }
+
+      .manager-download-item.downloading {
+        border-left: 4px solid var(--info-color);
+      }
+
+      .manager-download-item.error {
+        border-left: 4px solid var(--error-color);
+      }
+
+      .manager-download-title {
+        font-weight: 600;
+        font-size: 0.9em;
+        margin-bottom: 8px;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .manager-progress-bar {
+        width: 100%;
+        height: 6px;
+        background: var(--border-color);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+
+      .manager-progress-fill {
+        height: 100%;
+        background: var(--accent-color);
+        transition: width 0.3s;
+      }
+
+      .manager-download-info {
+        font-size: 0.8em;
+        color: var(--text-tertiary);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .manager-download-link {
+        display: inline-block;
+        padding: 4px 12px;
+        background: var(--accent-color);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 0.75em;
+        font-weight: 600;
+        margin-top: 6px;
+      }
+
+      .manager-download-link:hover {
+        background: var(--accent-secondary);
+      }
+
+      .download-manager-toggle {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 60px;
+        height: 60px;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 4px 20px var(--shadow-color);
+        z-index: 999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5em;
+        transition: all 0.3s;
+      }
+
+      .download-manager-toggle:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 30px var(--shadow-color);
+      }
+
+      .download-manager-toggle .badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: var(--error-color);
+        color: white;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-size: 0.6em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+      }
+
+      .close-manager-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        border-radius: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 0.9em;
+      }
+
+      .close-manager-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      .stat-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 2em;
+        font-weight: 700;
+        color: var(--accent-color);
+        margin-bottom: 5px;
+      }
+
+      .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.9em;
+      }
+
+      .help-text {
+        font-size: 0.9em;
+        color: var(--text-tertiary);
+        margin-top: 8px;
+      }
+
+      .options-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      @media (max-width: 768px) {
+        .header h1 {
+          font-size: 1.8em;
+        }
+
+        .nav-links {
+          position: static;
+          justify-content: center;
+          margin-bottom: 15px;
+        }
+
+        .theme-toggle {
+          position: static;
+          display: block;
+          margin: 15px auto;
+          width: fit-content;
+        }
+
+        .content-box {
+          padding: 20px;
+        }
+
+        .button-group {
+          flex-direction: column;
+        }
+
+        .options-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="nav-links">
+          <a href="index.html" class="nav-link">← Home</a>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()">Theme</button>
+        <h1>Bulk & Playlist Downloader</h1>
+        <p>Download multiple songs or entire playlists at once</p>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('bulk')">
+          Bulk URLs
+        </button>
+        <button class="tab-btn" onclick="switchTab('playlist')">
+          Playlist
+        </button>
+      </div>
+
+      <!-- Bulk URLs Tab -->
+      <div id="bulk-tab" class="tab-content active">
+        <div class="content-box">
+          <h2 class="section-title">Bulk URL Downloader</h2>
+          <p class="help-text">
+            Paste one URL per line. Downloads will be processed sequentially.
+          </p>
+
+          <textarea
+            id="bulkUrls"
+            class="url-input-area"
+            placeholder="https://www.youtube.com/watch?v=...&#10;https://soundcloud.com/...&#10;https://www.jiosaavn.com/song/...&#10;&#10;Paste your URLs here (one per line)"
+          ></textarea>
+
+          <div class="options-grid">
+            <div class="input-group">
+              <label>Audio Format</label>
+              <select id="bulkAudioFormat">
+                <option value="mp3">MP3</option>
+                <option value="m4a">M4A</option>
+                <option value="opus">Opus</option>
+                <option value="vorbis">Vorbis</option>
+                <option value="wav">WAV</option>
+                <option value="flac">FLAC</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>Audio Quality</label>
+              <select id="bulkAudioQuality">
+                <option value="0">Best (0)</option>
+                <option value="2">High (2)</option>
+                <option value="5">Medium (5)</option>
+                <option value="9">Low (9)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="checkbox-group">
+            <input type="checkbox" id="bulkEmbedThumbnail" checked />
+            <label for="bulkEmbedThumbnail">Embed Thumbnail</label>
+          </div>
+
+          <div class="checkbox-group">
+            <input type="checkbox" id="bulkAddMetadata" checked />
+            <label for="bulkAddMetadata">Add Metadata</label>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="startBulkDownload()">
+              Start Bulk Download
+            </button>
+            <button class="btn btn-secondary" onclick="clearBulkUrls()">
+              Clear URLs
+            </button>
+          </div>
+
+          <div class="stats">
+            <div class="stat-card">
+              <div class="stat-value" id="totalUrls">0</div>
+              <div class="stat-label">Total URLs</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="completedDownloads">0</div>
+              <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="failedDownloads">0</div>
+              <div class="stat-label">Failed</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-section" id="bulkProgress"></div>
+      </div>
+
+      <!-- Playlist Tab -->
+      <div id="playlist-tab" class="tab-content">
+        <div class="content-box">
+          <h2 class="section-title">Playlist Downloader</h2>
+          <p class="help-text">
+            Download entire playlists from YouTube with advanced options
+          </p>
+
+          <div class="input-group">
+            <label>Playlist URL</label>
+            <input
+              type="text"
+              id="playlistUrl"
+              placeholder="https://www.youtube.com/playlist?list=..."
+            />
+          </div>
+
+          <div class="options-grid">
+            <div class="input-group">
+              <label>Download Type</label>
+              <select id="playlistType" onchange="togglePlaylistOptions()">
+                <option value="audio">Audio Only</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>Playlist Items</label>
+              <select id="playlistItems">
+                <option value="all">All Items</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-group" id="customRangeGroup" style="display: none">
+            <label>Custom Range (e.g., 1-5, 10, 15-20)</label>
+            <input type="text" id="customRange" placeholder="1-5,10,15-20" />
+          </div>
+
+          <!-- Audio Options -->
+          <div id="audioOptions">
+            <h3 style="margin: 20px 0 15px; color: var(--text-secondary)">
+              Audio Options
+            </h3>
+            <div class="options-grid">
+              <div class="input-group">
+                <label>Audio Format</label>
+                <select id="playlistAudioFormat">
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                  <option value="opus">Opus</option>
+                  <option value="vorbis">Vorbis</option>
+                  <option value="wav">WAV</option>
+                  <option value="flac">FLAC</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>Audio Quality</label>
+                <select id="playlistAudioQuality">
+                  <option value="0">Best (0)</option>
+                  <option value="2">High (2)</option>
+                  <option value="5">Medium (5)</option>
+                  <option value="9">Low (9)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="checkbox-group">
+              <input type="checkbox" id="playlistEmbedThumbnail" checked />
+              <label for="playlistEmbedThumbnail">Embed Thumbnail</label>
+            </div>
+
+            <div class="checkbox-group">
+              <input type="checkbox" id="playlistAddMetadata" checked />
+              <label for="playlistAddMetadata">Add Metadata</label>
+            </div>
+          </div>
+
+          <!-- Video Options -->
+          <div id="videoOptions" style="display: none">
+            <h3 style="margin: 20px 0 15px; color: var(--text-secondary)">
+              Video Options
+            </h3>
+            <div class="options-grid">
+              <div class="input-group">
+                <label>Video Quality</label>
+                <select id="playlistVideoQuality">
+                  <option value="best">Best Available</option>
+                  <option value="2160">4K (2160p)</option>
+                  <option value="1440">2K (1440p)</option>
+                  <option value="1080">Full HD (1080p)</option>
+                  <option value="720">HD (720p)</option>
+                  <option value="480">SD (480p)</option>
+                  <option value="360">Low (360p)</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>Frame Rate</label>
+                <select id="playlistVideoFPS">
+                  <option value="any">Any FPS</option>
+                  <option value="60">60 FPS</option>
+                  <option value="30">30 FPS</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>Video Format</label>
+                <select id="playlistVideoFormat">
+                  <option value="mkv">MKV</option>
+                  <option value="mp4">MP4</option>
+                  <option value="webm">WebM</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="checkbox-group">
+              <input type="checkbox" id="playlistEmbedSubtitles" />
+              <label for="playlistEmbedSubtitles">Embed Subtitles</label>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="startPlaylistDownload()">
+              Download Playlist
+            </button>
+            <button class="btn btn-secondary" onclick="clearPlaylistUrl()">
+              Clear URL
+            </button>
+          </div>
+
+          <div class="stats">
+            <div class="stat-card">
+              <div class="stat-value" id="playlistTotal">0</div>
+              <div class="stat-label">Total Items</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="playlistCompleted">0</div>
+              <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="playlistFailed">0</div>
+              <div class="stat-label">Failed</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-section" id="playlistProgress"></div>
+      </div>
+    </div>
+
+    <!-- Download Manager -->
+    <div id="downloadManager" class="download-manager">
+      <div class="download-manager-header">
+        <h3>Downloads</h3>
+        <button class="close-manager-btn" onclick="toggleDownloadManager()">
+          Close
+        </button>
+      </div>
+      <div class="download-manager-list" id="downloadManagerList">
+        <div
+          style="text-align: center; padding: 20px; color: var(--text-tertiary)"
+        >
+          No active downloads
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Manager Toggle Button -->
+    <button
+      id="downloadManagerToggle"
+      class="download-manager-toggle"
+      onclick="toggleDownloadManager()"
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span class="badge" id="downloadBadge" style="display: none">0</span>
+    </button>
+
+    <script src="config.js"></script>
+    <script>
+      // Helper to get API base URL
+      function getApiBaseUrl() {
+        if (typeof API_BASE_URL !== "undefined" && API_BASE_URL) {
+          return API_BASE_URL;
+        }
+        return window.location.origin;
+      }
+
+      let bulkDownloads = [];
+      let currentDownloadIndex = 0;
+      let playlistDownloadId = null;
+      let downloadManagerVisible = false;
+
+      // Load downloads from localStorage on page load
+      function loadDownloadsFromStorage() {
+        try {
+          const stored = localStorage.getItem("allDownloads");
+          if (stored) {
+            const allDownloads = JSON.parse(stored);
+            // Convert allDownloads object to bulkDownloads array format
+            bulkDownloads = Object.values(allDownloads).map((download) => ({
+              url: download.url,
+              title: download.title,
+              status:
+                download.status === "queued"
+                  ? "queued"
+                  : download.status === "downloading"
+                  ? "downloading"
+                  : download.status === "complete"
+                  ? "complete"
+                  : "error",
+              progress: download.progress || 0,
+              error: download.error || null,
+              downloadId: download.id,
+              download_url: download.download_url || null,
+            }));
+
+            // Mark all complete downloads as already downloaded (prevent re-download on page load)
+            if (!window.autoDownloadedIds) {
+              window.autoDownloadedIds = new Set();
+            }
+            bulkDownloads.forEach((download) => {
+              if (download.status === "complete") {
+                const uniqueId =
+                  download.downloadId || download.download_id || download.url;
+                window.autoDownloadedIds.add(uniqueId);
+              }
+            });
+
+            updateDownloadManager();
+          }
+        } catch (e) {
+          console.error("Error loading downloads from storage:", e);
+        }
+      }
+
+      // Save bulk downloads to localStorage (convert to allDownloads format)
+      function saveDownloadsToStorage() {
+        try {
+          const allDownloads = {};
+          bulkDownloads.forEach((download) => {
+            if (download.downloadId) {
+              allDownloads[download.downloadId] = {
+                id: download.downloadId,
+                title: download.title,
+                url: download.url,
+                status: download.status,
+                progress: download.progress || 0,
+                error: download.error || null,
+                download_url: download.download_url || null,
+              };
+            }
+          });
+          localStorage.setItem("allDownloads", JSON.stringify(allDownloads));
+        } catch (e) {
+          console.error("Error saving downloads to storage:", e);
+        }
+      }
+
+      // Extract song title from URL
+      function extractTitleFromUrl(url) {
+        try {
+          // YouTube
+          if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            const match = url.match(/[?&]v=([^&]+)/);
+            if (match) return `YouTube: ${match[1]}`;
+          }
+          // SoundCloud
+          if (url.includes("soundcloud.com")) {
+            const parts = url.split("/");
+            const title = parts[parts.length - 1] || parts[parts.length - 2];
+            return title.replace(/-/g, " ").substring(0, 50);
+          }
+          // JioSaavn
+          if (url.includes("jiosaavn.com") || url.includes("saavn.com")) {
+            const parts = url.split("/");
+            const title = parts[parts.length - 1] || parts[parts.length - 2];
+            return title.replace(/-/g, " ").substring(0, 50);
+          }
+          // Generic - extract domain and path
+          const urlObj = new URL(url);
+          return `${urlObj.hostname}${urlObj.pathname.substring(0, 30)}`;
+        } catch {
+          return url.substring(0, 50) + "...";
+        }
+      }
+
+      // Toggle download manager
+      function toggleDownloadManager() {
+        downloadManagerVisible = !downloadManagerVisible;
+        const manager = document.getElementById("downloadManager");
+        if (downloadManagerVisible) {
+          manager.classList.add("show");
+        } else {
+          manager.classList.remove("show");
+        }
+      }
+
+      // Update download manager
+      function updateDownloadManager() {
+        const managerList = document.getElementById("downloadManagerList");
+        const badge = document.getElementById("downloadBadge");
+
+        const activeDownloads = bulkDownloads.filter(
+          (d) =>
+            d.status === "downloading" ||
+            d.status === "queued" ||
+            d.status === "complete"
+        );
+
+        if (activeDownloads.length === 0) {
+          managerList.innerHTML =
+            '<div style="text-align: center; padding: 20px; color: var(--text-tertiary);">No active downloads</div>';
+          badge.style.display = "none";
+          return;
+        }
+
+        badge.style.display = "flex";
+        badge.textContent = activeDownloads.length;
+
+        managerList.innerHTML = "";
+        activeDownloads.forEach((download, index) => {
+          const item = document.createElement("div");
+          item.className = `manager-download-item ${download.status}`;
+
+          let downloadButton = "";
+          if (download.status === "complete" && download.download_url) {
+            downloadButton = `
+              <a href="${getApiBaseUrl()}${download.download_url}" 
+                 class="manager-download-link" 
+                 download>
+                Download
+              </a>
+            `;
+          }
+
+          // Show complete URL initially, then use backend title if available
+          const managerTitle =
+            download.title && !download.title.startsWith("Item ")
+              ? download.title
+              : download.url;
+
+          item.innerHTML = `
+            <div class="manager-download-title">${managerTitle}</div>
+            <div class="manager-progress-bar">
+              <div class="manager-progress-fill" style="width: ${
+                download.progress
+              }%"></div>
+            </div>
+            <div class="manager-download-info">
+              <span>${
+                download.status === "complete"
+                  ? "Complete"
+                  : download.status === "error"
+                  ? "Failed"
+                  : `${Math.round(download.progress)}%`
+              }</span>
+              ${downloadButton}
+            </div>
+          `;
+
+          managerList.appendChild(item);
+        });
+      }
+
+      // Theme Toggle
+      function toggleTheme() {
+        document.body.classList.toggle("light-theme");
+        const theme = document.body.classList.contains("light-theme")
+          ? "light"
+          : "dark";
+        localStorage.setItem("theme", theme);
+      }
+
+      // Load saved theme and downloads
+      window.addEventListener("DOMContentLoaded", () => {
+        const savedTheme = localStorage.getItem("theme");
+        if (savedTheme === "light") {
+          document.body.classList.add("light-theme");
+        }
+        loadDownloadsFromStorage();
+      });
+
+      // Tab Switching
+      function switchTab(tab) {
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.classList.remove("active");
+        });
+        document.querySelectorAll(".tab-content").forEach((content) => {
+          content.classList.remove("active");
+        });
+
+        if (tab === "bulk") {
+          document
+            .querySelector(".tab-btn:nth-child(1)")
+            .classList.add("active");
+          document.getElementById("bulk-tab").classList.add("active");
+        } else {
+          document
+            .querySelector(".tab-btn:nth-child(2)")
+            .classList.add("active");
+          document.getElementById("playlist-tab").classList.add("active");
+        }
+      }
+
+      // Update URL count
+      document.getElementById("bulkUrls")?.addEventListener("input", (e) => {
+        const urls = e.target.value
+          .split("\n")
+          .map((url) => url.trim())
+          .filter((url) => url.length > 0);
+        document.getElementById("totalUrls").textContent = urls.length;
+      });
+
+      // Update playlist items selector
+      document
+        .getElementById("playlistItems")
+        ?.addEventListener("change", (e) => {
+          const customRangeGroup = document.getElementById("customRangeGroup");
+          if (e.target.value === "custom") {
+            customRangeGroup.style.display = "block";
+          } else {
+            customRangeGroup.style.display = "none";
+          }
+        });
+
+      // Toggle playlist download type options
+      function togglePlaylistOptions() {
+        const type = document.getElementById("playlistType").value;
+        const audioOptions = document.getElementById("audioOptions");
+        const videoOptions = document.getElementById("videoOptions");
+
+        if (type === "audio") {
+          audioOptions.style.display = "block";
+          videoOptions.style.display = "none";
+        } else {
+          audioOptions.style.display = "none";
+          videoOptions.style.display = "block";
+        }
+      }
+
+      // Clear bulk URLs
+      function clearBulkUrls() {
+        document.getElementById("bulkUrls").value = "";
+        document.getElementById("totalUrls").textContent = "0";
+        document.getElementById("bulkProgress").innerHTML = "";
+        bulkDownloads = [];
+        currentDownloadIndex = 0;
+        updateBulkStats();
+      }
+
+      // Clear playlist URL
+      function clearPlaylistUrl() {
+        document.getElementById("playlistUrl").value = "";
+        document.getElementById("playlistProgress").innerHTML = "";
+        playlistDownloadId = null;
+        updatePlaylistStats(0, 0, 0);
+      }
+
+      // Update bulk stats
+      function updateBulkStats() {
+        const completed = bulkDownloads.filter(
+          (d) => d.status === "complete"
+        ).length;
+        const failed = bulkDownloads.filter((d) => d.status === "error").length;
+        document.getElementById("completedDownloads").textContent = completed;
+        document.getElementById("failedDownloads").textContent = failed;
+      }
+
+      // Update playlist stats
+      function updatePlaylistStats(total, completed, failed) {
+        document.getElementById("playlistTotal").textContent = total;
+        document.getElementById("playlistCompleted").textContent = completed;
+        document.getElementById("playlistFailed").textContent = failed;
+      }
+
+      // Start bulk download
+      async function startBulkDownload() {
+        const urlsText = document.getElementById("bulkUrls").value;
+        const urls = urlsText
+          .split("\n")
+          .map((url) => url.trim())
+          .filter((url) => url.length > 0);
+
+        if (urls.length === 0) {
+          alert("Please enter at least one URL");
+          return;
+        }
+
+        // Get options
+        const options = {
+          audioFormat: document.getElementById("bulkAudioFormat").value,
+          audioQuality: document.getElementById("bulkAudioQuality").value,
+          embedThumbnail: document.getElementById("bulkEmbedThumbnail").checked,
+          addMetadata: document.getElementById("bulkAddMetadata").checked,
+          keepVideo: false,
+        };
+
+        console.log(`Starting bulk download for ${urls.length} URLs`);
+
+        // Initialize downloads
+        bulkDownloads = urls.map((url, index) => ({
+          url,
+          title: `Item ${index + 1}`,
+          status: "queued",
+          progress: 0,
+          error: null,
+          downloadId: null,
+        }));
+
+        currentDownloadIndex = 0;
+        updateBulkStats();
+        renderBulkProgress();
+
+        // Send bulk download request
+        try {
+          const response = await fetch(`${getApiBaseUrl()}/bulk_download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls, advancedOptions: options }),
+          });
+
+          const data = await response.json();
+          console.log("Bulk download started:", data);
+
+          if (data.bulk_id) {
+            // Poll for progress
+            pollBulkProgress(data.bulk_id);
+          }
+        } catch (error) {
+          console.error("Bulk download error:", error);
+          alert(`Error: ${error.message}`);
+        }
+      }
+
+      // Poll bulk download progress
+      async function pollBulkProgress(bulkId) {
+        const pollInterval = setInterval(async () => {
+          try {
+            const response = await fetch(
+              `${getApiBaseUrl()}/bulk_status/${bulkId}`
+            );
+            const data = await response.json();
+
+            console.log("Bulk status:", data);
+
+            if (data.downloads) {
+              bulkDownloads = data.downloads;
+              saveDownloadsToStorage();
+              renderBulkProgress();
+              updateBulkStats();
+              updateDownloadManager();
+
+              // Check if all done
+              const allDone = bulkDownloads.every(
+                (d) => d.status === "complete" || d.status === "error"
+              );
+
+              if (allDone) {
+                clearInterval(pollInterval);
+                console.log("All bulk downloads completed");
+              }
+            }
+          } catch (error) {
+            console.error("Poll error:", error);
+            clearInterval(pollInterval);
+          }
+        }, 2000);
+      }
+
+      // Render bulk progress
+      function renderBulkProgress() {
+        const container = document.getElementById("bulkProgress");
+        container.innerHTML = "";
+
+        // Track which downloads we've already auto-downloaded
+        if (!window.autoDownloadedIds) {
+          window.autoDownloadedIds = new Set();
+        }
+
+        bulkDownloads.forEach((download, index) => {
+          const item = document.createElement("div");
+          item.className = `download-item ${download.status}`;
+
+          const statusClass = `status-${download.status}`;
+          const statusText =
+            download.status.charAt(0).toUpperCase() + download.status.slice(1);
+
+          // Show complete URL initially, then use backend title if available and meaningful
+          let displayTitle;
+          if (download.title && !download.title.startsWith("Item ")) {
+            // Backend returned a meaningful title
+            displayTitle = download.title;
+          } else {
+            // Show complete URL
+            displayTitle = download.url;
+          }
+
+          let downloadButton = "";
+          if (download.status === "complete" && download.download_url) {
+            downloadButton = `
+              <a href="${getApiBaseUrl()}${download.download_url}" 
+                 class="download-link" 
+                 download
+                 onclick="handleBulkDownloadClick(event, '${getApiBaseUrl()}${
+              download.download_url
+            }', '${displayTitle}')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download File
+              </a>
+            `;
+          }
+
+          item.innerHTML = `
+            <div class="download-header">
+              <div class="download-title">${displayTitle}</div>
+              <div class="download-status ${statusClass}">${statusText}</div>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${
+                download.progress
+              }%"></div>
+            </div>
+            <div class="download-info">
+              ${download.error || download.speed || "Waiting..."}
+              ${downloadButton}
+            </div>
+          `;
+
+          container.appendChild(item);
+
+          // Auto-download completed files (only once per download)
+          if (download.status === "complete" && download.download_url) {
+            // Use URL as unique identifier if downloadId is not available
+            const uniqueId =
+              download.downloadId || download.download_id || download.url;
+
+            if (!window.autoDownloadedIds.has(uniqueId)) {
+              window.autoDownloadedIds.add(uniqueId);
+
+              // Trigger automatic download
+              setTimeout(() => {
+                const link = document.createElement("a");
+                link.href = `${getApiBaseUrl()}${download.download_url}`;
+                link.download = download.title || `download_${index + 1}`;
+                link.style.display = "none";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                console.log(`✅ Auto-downloaded: ${download.title}`);
+              }, 500 * index); // Stagger downloads by 500ms each
+            }
+          }
+        });
+
+        // Update download manager and save to storage
+        saveDownloadsToStorage();
+        updateDownloadManager();
+      }
+
+      // Handle bulk download click with auto-download
+      function handleBulkDownloadClick(event, url, filename) {
+        // Let the default download behavior work
+        console.log(`Downloading: ${filename} from ${url}`);
+      }
+
+      // Start playlist download
+      async function startPlaylistDownload() {
+        const url = document.getElementById("playlistUrl").value.trim();
+        if (!url) {
+          alert("Please enter a playlist URL");
+          return;
+        }
+
+        const type = document.getElementById("playlistType").value;
+        const itemsOption = document.getElementById("playlistItems").value;
+
+        // Build options
+        const options = {
+          keepVideo: type === "video",
+        };
+
+        // Custom args for playlist
+        let customArgs = "";
+
+        if (itemsOption === "custom") {
+          const range = document.getElementById("customRange").value.trim();
+          if (range) {
+            // Validate playlist range format
+            const validRange = /^(\d+|\d+-\d+)(,(\d+|\d+-\d+))*$/;
+            if (!validRange.test(range)) {
+              alert(
+                "Invalid playlist range format. Use formats like: 1-5, 1,3,5, or 1-3,5-7"
+              );
+              return;
+            }
+            customArgs += ` --playlist-items ${range}`;
+          }
+        }
+
+        if (type === "audio") {
+          options.audioFormat = document.getElementById(
+            "playlistAudioFormat"
+          ).value;
+          options.audioQuality = document.getElementById(
+            "playlistAudioQuality"
+          ).value;
+          options.embedThumbnail = document.getElementById(
+            "playlistEmbedThumbnail"
+          ).checked;
+          options.addMetadata = document.getElementById(
+            "playlistAddMetadata"
+          ).checked;
+        } else {
+          options.videoQuality = document.getElementById(
+            "playlistVideoQuality"
+          ).value;
+          options.videoFPS = document.getElementById("playlistVideoFPS").value;
+          options.videoFormat = document.getElementById(
+            "playlistVideoFormat"
+          ).value;
+          options.embedSubtitles = document.getElementById(
+            "playlistEmbedSubtitles"
+          ).checked;
+          options.addMetadata = true;
+        }
+
+        if (customArgs) {
+          options.customArgs = customArgs;
+        }
+
+        console.log("Starting playlist download:", { url, options });
+
+        try {
+          const response = await fetch(`${getApiBaseUrl()}/download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url,
+              title: url,
+              advancedOptions: options,
+            }),
+          });
+
+          const data = await response.json();
+          console.log("Playlist download started:", data);
+
+          if (data.download_id) {
+            playlistDownloadId = data.download_id;
+
+            // Add to bulkDownloads for tracking
+            bulkDownloads.push({
+              url: url,
+              title: url,
+              status: "downloading",
+              progress: 0,
+              downloadId: data.download_id,
+              download_id: data.download_id,
+              isPlaylist: true,
+            });
+
+            saveDownloadsToStorage();
+            updateDownloadManager();
+            pollPlaylistProgress(data.download_id);
+          }
+        } catch (error) {
+          console.error("Playlist download error:", error);
+          alert(`Error: ${error.message}`);
+        }
+      }
+
+      // Poll playlist progress
+      async function pollPlaylistProgress(downloadId) {
+        const pollInterval = setInterval(async () => {
+          try {
+            const response = await fetch(
+              `${getApiBaseUrl()}/download_status/${downloadId}`
+            );
+            const data = await response.json();
+
+            console.log("Playlist status:", data);
+
+            renderPlaylistProgress(data);
+
+            if (data.status === "complete" || data.status === "error") {
+              clearInterval(pollInterval);
+              console.log("Playlist download finished:", data.status);
+            }
+          } catch (error) {
+            console.error("Poll error:", error);
+            clearInterval(pollInterval);
+          }
+        }, 2000);
+      }
+
+      // Render playlist progress
+      function renderPlaylistProgress(data) {
+        const container = document.getElementById("playlistProgress");
+
+        if (!container.querySelector(".download-item")) {
+          const item = document.createElement("div");
+          item.className = "download-item";
+          item.id = "playlistItem";
+          container.appendChild(item);
+        }
+
+        // Track auto-downloaded files for this playlist
+        if (!window.playlistAutoDownloadedFiles) {
+          window.playlistAutoDownloadedFiles = new Set();
+        }
+
+        // Update bulkDownloads array with latest status
+        const downloadIndex = bulkDownloads.findIndex(
+          (d) =>
+            d.downloadId === playlistDownloadId ||
+            d.download_id === playlistDownloadId
+        );
+        if (downloadIndex !== -1) {
+          bulkDownloads[downloadIndex].status = data.status;
+          bulkDownloads[downloadIndex].progress = data.progress;
+          bulkDownloads[downloadIndex].title =
+            data.title && !data.title.startsWith("http")
+              ? data.title
+              : data.url || bulkDownloads[downloadIndex].title;
+          if (data.download_url) {
+            bulkDownloads[downloadIndex].download_url = data.download_url;
+          }
+          if (data.file) {
+            bulkDownloads[downloadIndex].file = data.file;
+          }
+          saveDownloadsToStorage();
+          updateDownloadManager();
+        }
+
+        const item = document.getElementById("playlistItem");
+        const statusClass = `status-${data.status}`;
+        const statusText =
+          data.status.charAt(0).toUpperCase() + data.status.slice(1);
+
+        // Show URL or actual title (not 'Playlist: Playlist')
+        const displayTitle =
+          data.title && !data.title.startsWith("http")
+            ? data.title
+            : data.url || "Playlist";
+
+        // Check if we have individual file downloads
+        let downloadButton = "";
+        if (data.file_downloads && data.file_downloads.length > 0) {
+          // Show files downloaded so far
+          const filesDownloaded = data.file_downloads.length;
+          const totalFiles =
+            data.total_files || data.file_count || filesDownloaded;
+          const statusMsg =
+            data.status === "complete"
+              ? `✓ All ${filesDownloaded} file(s) downloaded!`
+              : `⬇ ${filesDownloaded}/${totalFiles} file(s) downloaded...`;
+          downloadButton = `
+            <br>
+            <div style="margin-top: 10px; color: var(--success-color);">
+              ${statusMsg}
+            </div>
+          `;
+        } else if (data.status === "complete" && data.download_url) {
+          // Fallback for old format
+          downloadButton = `
+            <br>
+            <a href="${getApiBaseUrl()}${data.download_url}" 
+               class="download-link" 
+               download
+               style="margin-top: 10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Download Files
+            </a>
+          `;
+        }
+
+        item.className = `download-item ${data.status}`;
+        item.innerHTML = `
+          <div class="download-header">
+            <div class="download-title">${displayTitle}</div>
+            <div class="download-status ${statusClass}">${statusText}</div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${data.progress}%"></div>
+          </div>
+          <div class="download-info">
+            ${data.speed} • ETA: ${data.eta} • ${Math.round(data.progress)}%
+            ${
+              data.error
+                ? `<br><span style="color: var(--error-color)">Error: ${data.error}</span>`
+                : ""
+            }
+            ${downloadButton}
+          </div>
+        `;
+
+        // Update stats (estimate based on progress)
+        if (data.progress > 0) {
+          const estimated = Math.max(1, Math.round(100 / data.progress));
+          const completed = Math.round((estimated * data.progress) / 100);
+          updatePlaylistStats(estimated, completed, 0);
+        }
+
+        // Auto-download individual files AS SOON AS they appear (even during download)
+        if (data.file_downloads && data.file_downloads.length > 0) {
+          // Download each newly completed file immediately
+          data.file_downloads.forEach((fileDownload, index) => {
+            const fileId = fileDownload.download_id;
+
+            // Skip if already downloaded
+            if (window.playlistAutoDownloadedFiles.has(fileId)) {
+              return;
+            }
+
+            window.playlistAutoDownloadedFiles.add(fileId);
+
+            console.log(
+              `🎵 New file ready! Auto-downloading: ${fileDownload.title}`
+            );
+
+            // Download immediately (no setTimeout needed, files complete one at a time)
+            const downloadUrl = `/get_file/${playlistDownloadId}/${fileDownload.file}`;
+            const link = document.createElement("a");
+            link.href = `${getApiBaseUrl()}${downloadUrl}`;
+            link.download = fileDownload.file || fileDownload.title;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log(
+              `✅ Auto-downloaded file ${index + 1}: ${fileDownload.title}`
+            );
+
+            // Add to bulkDownloads for tracking
+            bulkDownloads.push({
+              downloadId: fileId,
+              title: fileDownload.title,
+              url: data.url,
+              status: "complete",
+              progress: 100,
+              download_url: downloadUrl,
+              file: fileDownload.file,
+            });
+            saveDownloadsToStorage();
+            updateDownloadManager();
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
