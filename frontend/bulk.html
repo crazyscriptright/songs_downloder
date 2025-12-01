@@ -934,12 +934,28 @@
 
     <script src="config.js"></script>
     <script>
-      // Helper to get API base URL
+      // Helper to get API base URL with fallback
       function getApiBaseUrl() {
-        if (typeof API_BASE_URL !== "undefined" && API_BASE_URL) {
-          return API_BASE_URL;
+        let url;
+        if (window.API && window.API.baseUrl) {
+          url = window.API.baseUrl;
+        } else {
+          // Fallback if config.js hasn't loaded yet
+          const hostname = window.location.hostname;
+          if (hostname === "localhost" || hostname === "127.0.0.1") {
+            url = "http://localhost:5000";
+          } else {
+            // Production fallback
+            url = "https://song-download-9889cf8e8f85.herokuapp.com";
+          }
         }
-        return window.location.origin;
+
+        // Ensure no trailing slash
+        if (url && url.endsWith("/")) {
+          url = url.slice(0, -1);
+        }
+
+        return url || "https://song-download-9889cf8e8f85.herokuapp.com";
       }
 
       let bulkDownloads = [];
