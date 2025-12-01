@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import { resolve } from "path";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -21,6 +22,12 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: "dist",
+      rollupOptions: {
+        input: {
+          main: resolve(__dirname, "index.html"),
+          bulk: resolve(__dirname, "bulk.html"),
+        },
+      },
     },
     define: {
       "import.meta.env.VITE_API_URL": JSON.stringify(
